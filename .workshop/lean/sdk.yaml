@@ -1,0 +1,6 @@
+name: lean
+version: "0.1"
+summary: Lean 4 (elan) + Mathlib cache for LeanHash
+description: |
+  elan を workshop ユーザーのホームに入れ、/project/lean-toolchain の版の
+  Lean 4 と Lake を用意する。lakefile があれば Mathlib のビルド済みキャッシュも取得する。

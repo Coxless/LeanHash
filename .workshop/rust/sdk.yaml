@@ -1,0 +1,6 @@
+name: rust
+version: "0.1"
+summary: Rust toolchain (rustup) for the LeanHash crate and Charon
+description: |
+  rustup を workshop ユーザーのホームに入れ、/project/rust-toolchain.toml の版と
+  rustfmt / clippy を用意する。Charon（Aeneas）が要求する nightly は aeneas SDK 側で入る。

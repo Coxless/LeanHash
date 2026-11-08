@@ -1,0 +1,30 @@
+#!/bin/bash
+source /project/.workshop/versions.sh
+source /project/.workshop/env.sh
+SRC="$HOME/.local/src"
+mkdir -p "$SRC" "$LEANHASH_TOOLS/bin" "$HOME/.local/bin"
+
+fetch() {  # fetch <repo> <rev> <dir>
+  if [ ! -d "$3/.git" ]; then git clone --quiet "$1" "$3"; fi
+  git -C "$3" fetch --quiet origin
+  git -C "$3" checkout --quiet "$2"
+}
+
+# SMHasher3
+fetch "$SMHASHER3_REPO" "$SMHASHER3_REV" "$SRC/smhasher3"
+if [ ! -x "$LEANHASH_TOOLS/bin/SMHasher3" ] || \
+   [ "$(cat "$LEANHASH_TOOLS/smhasher3.rev" 2>/dev/null)" != "$SMHASHER3_REV" ]; then
+  cmake -S "$SRC/smhasher3" -B "$SRC/smhasher3/build" -G Ninja -DCMAKE_BUILD_TYPE=Release
+  cmake --build "$SRC/smhasher3/build" -j"$(nproc)"
+  cp "$SRC/smhasher3/build/SMHasher3" "$LEANHASH_TOOLS/bin/"
+  echo "$SMHASHER3_REV" > "$LEANHASH_TOOLS/smhasher3.rev"
+fi
+ln -sf "$LEANHASH_TOOLS/bin/SMHasher3" "$HOME/.local/bin/SMHasher3"
+
+# CLHASH（x86-64 の PCLMULQDQ が必要。無い CPU ではスキップ）
+if grep -qw pclmulqdq /proc/cpuinfo; then
+  fetch "$CLHASH_REPO" "$CLHASH_REV" "$SRC/clhash"
+  make -C "$SRC/clhash" -j"$(nproc)"
+else
+  echo "warning: PCLMULQDQ が無いため CLHASH をスキップ"
+fi

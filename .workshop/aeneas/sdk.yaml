@@ -1,0 +1,7 @@
+name: aeneas
+version: "0.1"
+summary: Charon + Aeneas (Rust -> Lean) for LeanHash P3.5
+description: |
+  OCaml 5（opam）で Aeneas を、rustup で Charon を、versions.sh で固定したコミットから
+  ビルドする。初回は 30 分以上かかるため、通常開発用の dev ワークショップには含めず
+  verify ワークショップでのみ使う。rust SDK の後に並べること（Charon のビルドに rustup が要る）。

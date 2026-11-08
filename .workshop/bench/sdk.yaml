@@ -1,0 +1,7 @@
+name: bench
+version: "0.1"
+summary: SMHasher3, CLHASH and benchmark tools for LeanHash P0'/P4
+description: |
+  品質評価（SMHasher3）と速度比較のための道具。SMHasher3 と CLHASH（論文値の再現用）を
+  versions.sh で固定したコミットからビルドして ~/.local/opt に置く。
+  XXH3 は libxxhash-dev、rapidhash / foldhash / ahash は Rust の dev-dependencies で比較する。

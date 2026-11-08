@@ -1,0 +1,21 @@
+#!/bin/bash
+# workshop ユーザーで /project/ を cwd として実行。
+source /project/.workshop/versions.sh
+source /project/.workshop/env.sh
+if ! command -v elan >/dev/null 2>&1; then
+  curl -sSfL "https://raw.githubusercontent.com/leanprover/elan/${ELAN_VERSION}/elan-init.sh" \
+    -o /tmp/elan-init.sh
+  bash /tmp/elan-init.sh -y --no-modify-path --default-toolchain none
+  rm -f /tmp/elan-init.sh
+  source /project/.workshop/env.sh
+fi
+grep -q 'leanhash-env' "$HOME/.bashrc" 2>/dev/null || \
+  echo 'source /project/.workshop/env.sh  # leanhash-env' >> "$HOME/.bashrc"
+# lean-toolchain の版をインストール（elan は cwd のファイルを読む）
+cd /project
+elan toolchain install "$(cat lean-toolchain)"
+lean --version
+# Mathlib のビルド済み .olean を取得（数GB。失敗しても環境自体は使える）
+if [ -f lakefile.toml ] || [ -f lakefile.lean ]; then
+  lake exe cache get || echo "warning: Mathlib cache の取得に失敗。'workshop run -- lean-cache' で再試行"
+fi

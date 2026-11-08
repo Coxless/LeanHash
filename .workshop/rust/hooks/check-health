@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ -x /home/workshop/.cargo/bin/cargo ]; then
+  workshopctl set-health okay
+else
+  workshopctl set-health error "rustup/cargo not installed"
+fi

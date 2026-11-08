@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ -x /home/workshop/.elan/bin/lean ]; then
+  workshopctl set-health okay
+else
+  workshopctl set-health error "elan/lean not installed"
+fi

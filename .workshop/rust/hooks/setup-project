@@ -1,0 +1,17 @@
+#!/bin/bash
+source /project/.workshop/env.sh
+if ! command -v rustup >/dev/null 2>&1; then
+  curl -sSfL https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+    -o /tmp/rustup-init
+  chmod +x /tmp/rustup-init
+  /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain none
+  rm -f /tmp/rustup-init
+  source /project/.workshop/env.sh
+fi
+grep -q 'leanhash-env' "$HOME/.bashrc" 2>/dev/null || \
+  echo 'source /project/.workshop/env.sh  # leanhash-env' >> "$HOME/.bashrc"
+# rust-toolchain.toml を読んで版とコンポーネントを入れる
+cd /project
+rustup toolchain install
+rustc --version
+cargo --version

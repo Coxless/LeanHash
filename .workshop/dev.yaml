@@ -1,0 +1,44 @@
+# LeanHash 通常開発用ワークショップ（P0'〜P4）。
+#   workshop launch dev
+#   workshop shell dev
+#   workshop run dev -- <action>
+name: dev
+base: ubuntu@24.04
+sdks:
+  - name: project-lean
+  - name: project-rust
+  - name: project-bench
+actions:
+  versions: |
+    source /project/.workshop/env.sh
+    lean --version; lake --version
+    rustc --version; cargo --version
+    SMHasher3 --version 2>/dev/null || ls -l "$LEANHASH_TOOLS/bin/SMHasher3"
+  lean-cache: |
+    source /project/.workshop/env.sh
+    cd /project && lake exe cache get
+  lean-build: |
+    source /project/.workshop/env.sh
+    cd /project && lake build "$@"
+  rust-test: |
+    source /project/.workshop/env.sh
+    if [ -f /project/rust/Cargo.toml ]; then
+      cd /project/rust && cargo test --workspace "$@"
+    else
+      echo "rust/Cargo.toml がまだありません（P0' で作成）"
+    fi
+  rust-lint: |
+    source /project/.workshop/env.sh
+    if [ -f /project/rust/Cargo.toml ]; then
+      cd /project/rust && cargo fmt --all --check && cargo clippy --workspace -- -D warnings
+    fi
+  smhasher: |
+    # 例: workshop run dev -- smhasher --list
+    source /project/.workshop/env.sh
+    SMHasher3 "$@"
+  check: |
+    source /project/.workshop/env.sh
+    cd /project && lake build
+    if [ -f /project/rust/Cargo.toml ]; then
+      cd /project/rust && cargo fmt --all --check && cargo clippy --workspace -- -D warnings && cargo test --workspace
+    fi

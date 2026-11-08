@@ -1,0 +1,6 @@
+#!/bin/bash
+# root で実行。elan / Lake / Mathlib キャッシュ取得に必要なシステムパッケージ。
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  ca-certificates curl git build-essential zstd

@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ -x /home/workshop/.local/bin/aeneas ] && [ -x /home/workshop/.local/bin/charon ]; then
+  workshopctl set-health okay
+else
+  workshopctl set-health error "aeneas/charon not built"
+fi

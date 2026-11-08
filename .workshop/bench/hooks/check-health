@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ -x /home/workshop/.local/opt/bin/SMHasher3 ]; then
+  workshopctl set-health okay
+else
+  workshopctl set-health error "SMHasher3 not built"
+fi

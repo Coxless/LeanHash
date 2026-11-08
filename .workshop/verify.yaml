@@ -1,0 +1,24 @@
+# Rust -> Lean 抽出（Charon + Aeneas）を含む検証用ワークショップ（P3.5）。
+# dev の全 SDK に aeneas を足したもの。初回 launch は Aeneas のビルドで時間がかかる。
+#   workshop launch verify
+name: verify
+base: ubuntu@24.04
+sdks:
+  - name: project-lean
+  - name: project-rust
+  - name: project-bench
+  - name: project-aeneas
+actions:
+  versions: |
+    source /project/.workshop/env.sh
+    lean --version; rustc --version
+    charon version 2>/dev/null || charon --version
+    aeneas -version 2>/dev/null || ls -l "$(command -v aeneas)"
+  extract: |
+    # 例: workshop run verify -- extract rust/leanhash-outer  → Lean/Extracted/ に出力
+    source /project/.workshop/env.sh
+    crate="${1:?usage: extract <crate dir>}"
+    out=/project/LeanHash/Extracted
+    mkdir -p "$out"
+    (cd "/project/$crate" && charon cargo --preset=aeneas --dest-file /tmp/crate.llbc)
+    aeneas -backend lean /tmp/crate.llbc -dest "$out"

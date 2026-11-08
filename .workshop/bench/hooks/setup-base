@@ -1,0 +1,6 @@
+#!/bin/bash
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  ca-certificates git build-essential cmake ninja-build \
+  libxxhash-dev hyperfine python3 python3-venv

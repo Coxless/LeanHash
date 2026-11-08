@@ -1,0 +1,8 @@
+# Workshop
+.workshop.lock
+# Lean / Lake
+.lake/
+# Rust
+target/
+# SMHasher3 / bench outputs
+/results/

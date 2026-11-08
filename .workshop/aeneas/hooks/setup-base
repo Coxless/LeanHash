@@ -1,0 +1,6 @@
+#!/bin/bash
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  ca-certificates curl git build-essential pkg-config m4 unzip bubblewrap \
+  opam libgmp-dev

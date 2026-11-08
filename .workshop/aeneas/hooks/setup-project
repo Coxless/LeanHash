@@ -1,0 +1,23 @@
+#!/bin/bash
+source /project/.workshop/versions.sh
+source /project/.workshop/env.sh
+SRC="$HOME/.local/src"
+mkdir -p "$SRC" "$HOME/.local/bin"
+
+# OCaml
+if [ ! -d "$HOME/.opam" ]; then
+  opam init --bare --disable-sandboxing -y
+fi
+opam switch list --short | grep -qx "$OCAML_VERSION" || opam switch create "$OCAML_VERSION" -y
+eval "$(opam env --switch="$OCAML_VERSION" --set-switch)"
+
+# Aeneas（Charon は aeneas/charon-pin のコミットを make setup-charon が取ってくる）
+if [ ! -d "$SRC/aeneas/.git" ]; then git clone --quiet "$AENEAS_REPO" "$SRC/aeneas"; fi
+git -C "$SRC/aeneas" fetch --quiet origin
+git -C "$SRC/aeneas" checkout --quiet "$AENEAS_REV"
+cd "$SRC/aeneas"
+opam install ./src --deps-only -y
+make setup-charon
+make
+ln -sf "$SRC/aeneas/bin/aeneas" "$HOME/.local/bin/aeneas"
+ln -sf "$SRC/aeneas/charon/bin/charon" "$HOME/.local/bin/charon"
