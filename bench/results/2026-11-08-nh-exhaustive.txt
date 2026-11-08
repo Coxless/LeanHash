@@ -1,0 +1,33 @@
+# NH ε-AU 全数照合（rust/leanhash-bench/src/bin/nh_exhaustive.rs）
+# Intel Xeon @ 2.10GHz, 4 cores, Rust 1.97.0, --release
+pair-full w=1: max collisions over all (m,m',c) = 2 (bound W = 2) -> OK; reduction mismatches = 0
+pair-full w=2: max collisions over all (m,m',c) = 4 (bound W = 4) -> OK; reduction mismatches = 0
+pair-full w=3: max collisions over all (m,m',c) = 8 (bound W = 8) -> OK; reduction mismatches = 0
+pair-full w=4: max collisions over all (m,m',c) = 16 (bound W = 16) -> OK; reduction mismatches = 0
+pair w=1: deltas=3 max collisions over all c = 2 (bound W = 2) -> OK; deltas attaining max = 3; per-k1 injectivity (pd_inj2) = true
+pair w=2: deltas=15 max collisions over all c = 4 (bound W = 4) -> OK; deltas attaining max = 9; per-k1 injectivity (pd_inj2) = true
+pair w=3: deltas=63 max collisions over all c = 8 (bound W = 8) -> OK; deltas attaining max = 21; per-k1 injectivity (pd_inj2) = true
+pair w=4: deltas=255 max collisions over all c = 16 (bound W = 16) -> OK; deltas attaining max = 45; per-k1 injectivity (pd_inj2) = true
+pair w=5: deltas=1023 max collisions over all c = 32 (bound W = 32) -> OK; deltas attaining max = 93; per-k1 injectivity (pd_inj2) = true
+pair w=6: deltas=4095 max collisions over all c = 64 (bound W = 64) -> OK; deltas attaining max = 189; per-k1 injectivity (pd_inj2) = true
+pair w=7: deltas=16383 max collisions over all c = 128 (bound W = 128) -> OK; deltas attaining max = 381; per-k1 injectivity (pd_inj2) = true
+pair w=8: deltas=65535 max collisions over all c = 256 (bound W = 256) -> OK; deltas attaining max = 765; per-k1 injectivity (pd_inj2) = true
+pair w=9: deltas=262143 max collisions over all c = 512 (bound W = 512) -> OK; deltas attaining max = 1533; per-k1 injectivity (pd_inj2) = true   [151 s]
+nh2 w=1: keys=16 max collisions = 8 (bound W^3 = 8) -> OK; deltas attaining max = 6
+nh2 w=2: keys=256 max collisions = 64 (bound W^3 = 64) -> OK; deltas attaining max = 18
+nh2 w=3: keys=4096 max collisions = 512 (bound W^3 = 512) -> OK; deltas attaining max = 42
+nh2 w=4: keys=65536 max collisions = 4096 (bound W^3 = 4096) -> OK; deltas attaining max = 90
+  delta=(0x1,0x0) collisions=65536
+  delta=(0x0,0x1) collisions=65536
+  delta=(0xffff,0xffff) collisions=2
+  delta=(0x8000,0x0) collisions=65536
+  delta=(0x1,0x1) collisions=2
+  delta=(0x8d23,0x455d) collisions=3
+  delta=(0xb88e,0x4f2) collisions=7
+  delta=(0xff49,0x5a03) collisions=7
+  delta=(0x39ae,0xe22d) collisions=12
+  delta=(0x12f4,0x4742) collisions=2
+  delta=(0xe36d,0xa7e0) collisions=2
+  delta=(0x7b18,0x9765) collisions=3
+sample w=16: max collisions (c=0) = 65536 (bound W = 65536) -> OK
+
