@@ -1,0 +1,9 @@
+[package]
+name = "leanhash"
+version = "0.0.1"
+description = "P0' prototype: NH + polynomial mod 2^61-1 + fmix64 (hand-written, not generated from HashIR)"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dev-dependencies]

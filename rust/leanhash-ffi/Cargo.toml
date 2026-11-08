@@ -1,0 +1,13 @@
+[package]
+name = "leanhash-ffi"
+version = "0.0.1"
+description = "C ABI for linking the prototype into SMHasher3"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+leanhash = { path = "../leanhash" }
