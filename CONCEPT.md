@@ -90,7 +90,7 @@
 
 - SMHasher3 全通過
 - 下位ビットの偏りのなさ
-- 速度: 長い入力で XXH3 / rapidhash の 50% 以上（仮置き。P0' の提案は 7 章と journal を参照）
+- 速度（2026-11-08 承認、同じ VM で交互計測した比、[journal](docs/journal/2026-11-08-p0prime-prototype.md)）: ≤32B で rapidhash の 0.6 倍以上、64B〜1KB で rapidhash の 0.8 倍以上、≥4KB で XXH3 の 0.5 倍以上、8B 以上の全区間で PolymurHash の 1.0 倍以上
 
 ### 4.3 狙わないもの
 
@@ -143,9 +143,9 @@ bench/                                       -- SMHasher3 への組み込み、�
 
 | 段階 | 内容 | ゲート |
 | :--- | :--- | :--- |
-| **P0' 試作（約2週間）** | Rust で NH＋fmix64 の素朴版。SMHasher3 と速度を foldhash / ahash / XXH3 / rapidhash / CLHASH と比較。CLHASH の論文値も再現 | **速度目標と ε 目標を数値で決定**（進むか判断）→ 試作 v2c で SMHasher3 全 PASS、目標を提案済み・判断待ち（[journal](docs/journal/2026-11-08-p0prime-prototype.md)） |
+| **P0' 試作（約2週間）** | Rust で NH＋fmix64 の素朴版。SMHasher3 と速度を foldhash / ahash / XXH3 / rapidhash / CLHASH と比較。CLHASH の論文値も再現 | **速度目標と ε 目標を数値で決定**（進むか判断）→ 試作 v2c で SMHasher3 全 PASS、目標を承認（2026-11-08）✅（[journal](docs/journal/2026-11-08-p0prime-prototype.md)） |
 | P0 Lean 準備（並行） | Lean 4 / Mathlib 環境、BitVec と bv_decide | xorshift 自己逆の定理 ✅ `LeanHash/Spec/Mix.lean` |
-| P1 仕上げ段 | fmix64 の仕様・逆関数・左右逆 | fmix64 全単射の定理 |
+| P1 仕上げ段 | fmix64 の仕様・逆関数・左右逆 | fmix64 全単射の定理 ✅ `LeanHash/Spec/Fmix.lean`（[journal](docs/journal/2026-11-08-p1-fmix64.md)） |
 | P2 圧縮段（中心） | 固定長 NH の ε-AU を数え上げで証明、8〜16bit 版で全数照合 | ε-AU 定理と実測が一致 |
 | P2.5 多項式段 | mod 2⁶¹−1 の多項式ハッシュの ε-AU（ε ≤ ℓ/p）と2段の合成 | 定理 |
 | P3 結合と Rust 出力 | 合成則、HashIR と EmitRust（`wrapping_*`、`u128`、`std::arch`）、eval fast = spec | 差分テストで全一致 |
@@ -156,8 +156,8 @@ bench/                                       -- SMHasher3 への組み込み、�
 
 ## 8. 未解決の問い
 
-- [ ] 速度目標の妥当性 → P0' で提案（≤32B: rapidhash の 0.6 倍、64B〜1KB: 0.8 倍、≥4KB: XXH3 の 0.5 倍、PolymurHash 以上）。判断待ち
-- [ ] ε の目標 → P0' で「2⁻⁶⁴ 寄り」を提案（≤1KB で 2⁻⁶²、長い入力で 2⁻⁶³ + (3n+1)/p）。判断待ち
+- [x] 速度目標 → ≤32B: rapidhash の 0.6 倍、64B〜1KB: 0.8 倍、≥4KB: XXH3 の 0.5 倍、PolymurHash 以上（2026-11-08 承認、[journal](docs/journal/2026-11-08-p0prime-prototype.md)）
+- [x] ε の目標 → 「2⁻⁶⁴ 寄り」: ≤1KB で 2⁻⁶²、長い入力で 2⁻⁶³ + (3n+1)/p（2026-11-08 承認、[journal](docs/journal/2026-11-08-p0prime-prototype.md)）
 - [ ] Hasher に約 1KB の鍵をどう渡すか（P3.5 の設計に直結）
 - [ ] 通常乗算（NH）か繰り上がりなし乗算（CLHASH）か
 - [x] 任意長入力 → NH（固定長）＋多項式 mod 2⁶¹−1 の二段構成（UMAC/VHASH 型）を採用候補
