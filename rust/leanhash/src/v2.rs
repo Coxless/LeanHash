@@ -1,0 +1,436 @@
+//! P0' 試作2（手書き）：ブロック 1KB、短い入力の専用経路、1 ブロック以内は multiply-shift で仕上げ。
+//!
+//! 入力長 L で経路が分かれる（どれも同じ NH の特殊化として書ける）:
+//! - **L ≤ 1024（1 ブロック）:** 語の組 (a_i, b_i) と長さの組 (L, 0) に NH64 をかけて 128bit acc を得る。
+//!   acc を multiply-shift `hi64(m · acc mod 2^128)`（m は奇数の鍵）で 64bit に落とし、fin と XOR して fmix64。
+//!   語の取り出しは長さごとに単射（L ≤ 16 は xxh3 風の重なり読み、それ以上は最後の組を末尾 16 バイトから重ねて読む）。
+//!   ε ≤ ε_NH + 2^-63。ε_NH は同じ組数なら 2^-64、組数が違うときは約 2^-63（P2 で証明する）
+//! - **L > 1024:** 1KB ごとの NH64（長さの組なし）→ 60bit limb で多項式 mod 2^61−1 → 長さ係数 →
+//!   `(h<<3 | t>>61) ^ fin` を fmix64。ε ≤ 2^-64 + (3n+1)/p
+
+use crate::{fmix64, horner, splitmix64, LIMB_MASK, P};
+
+pub const BLOCK_BYTES: usize = 1024;
+const PAIRS: usize = BLOCK_BYTES / 16; // 64
+const KEY_WORDS: usize = 2 * PAIRS + 2; // データ用 128 語 + 長さの組 2 語
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Keys {
+    pub nh: [u64; KEY_WORDS],
+    /// multiply-shift の乗数（奇数）
+    pub m: u128,
+    pub r: u64,
+    pub fin: u64,
+}
+
+impl Keys {
+    pub fn from_seed(seed: u64) -> Self {
+        let mut s = seed;
+        let mut nh = [0u64; KEY_WORDS];
+        for k in nh.iter_mut() {
+            *k = splitmix64(&mut s);
+        }
+        let m = (((splitmix64(&mut s) as u128) << 64) | splitmix64(&mut s) as u128) | 1;
+        let r = loop {
+            let v = splitmix64(&mut s) >> 3;
+            if v < P {
+                break v;
+            }
+        };
+        let fin = splitmix64(&mut s);
+        Keys { nh, m, r, fin }
+    }
+}
+
+#[inline(always)]
+fn rd64(b: &[u8], i: usize) -> u64 {
+    u64::from_le_bytes(b[i..i + 8].try_into().unwrap())
+}
+
+#[inline(always)]
+fn rd32(b: &[u8], i: usize) -> u64 {
+    u32::from_le_bytes(b[i..i + 4].try_into().unwrap()) as u64
+}
+
+#[inline(always)]
+fn nh_pair(a: u64, b: u64, ka: u64, kb: u64) -> u128 {
+    (a.wrapping_add(ka) as u128) * (b.wrapping_add(kb) as u128)
+}
+
+/// 128bit → 64bit の multiply-shift（Dietzfelbinger）。m が奇数で一様なら 2^-63-AU。
+#[inline(always)]
+fn ms(m: u128, x: u128) -> u64 {
+    (m.wrapping_mul(x) >> 64) as u64
+}
+
+/// 1 ブロック全体の NH64（4 本の独立な和にして命令レベル並列を稼ぐ）。
+#[inline(always)]
+fn nh_full_block(k: &[u64; KEY_WORDS], b: &[u8]) -> u128 {
+    let mut acc = [0u128; 4];
+    for (bc, kc) in b.chunks_exact(64).zip(k.chunks_exact(8)) {
+        for j in 0..4 {
+            acc[j] = acc[j].wrapping_add(nh_pair(
+                rd64(bc, 16 * j),
+                rd64(bc, 16 * j + 8),
+                kc[2 * j],
+                kc[2 * j + 1],
+            ));
+        }
+    }
+    acc[0].wrapping_add(acc[1]).wrapping_add(acc[2].wrapping_add(acc[3]))
+}
+
+/// 長さ len（1..=1024）の部分の NH64。最後の組は末尾 16 バイトから重ねて読む（len ≥ 16 のとき）。
+#[inline(always)]
+fn nh_partial(k: &[u64; KEY_WORDS], b: &[u8]) -> u128 {
+    let len = b.len();
+    if len <= 16 {
+        let (x, y) = if len >= 8 {
+            (rd64(b, 0), rd64(b, len - 8))
+        } else if len >= 4 {
+            (rd32(b, 0), rd32(b, len - 4))
+        } else if len > 0 {
+            (
+                b[0] as u64 | (b[len / 2] as u64) << 8 | (b[len - 1] as u64) << 16,
+                0,
+            )
+        } else {
+            return 0;
+        };
+        return nh_pair(x, y, k[0], k[1]);
+    }
+    let pairs = len.div_ceil(16);
+    // 最後の組以外は前から 16 バイトずつ、最後の組は末尾 16 バイト
+    let body = &b[..16 * (pairs - 1)];
+    let mut acc0 = 0u128;
+    let mut acc1 = 0u128;
+    let mut it = body.chunks_exact(32).zip(k.chunks_exact(4));
+    for (bc, kc) in &mut it {
+        acc0 = acc0.wrapping_add(nh_pair(rd64(bc, 0), rd64(bc, 8), kc[0], kc[1]));
+        acc1 = acc1.wrapping_add(nh_pair(rd64(bc, 16), rd64(bc, 24), kc[2], kc[3]));
+    }
+    if body.len() % 32 != 0 {
+        let p = pairs - 2;
+        acc0 = acc0.wrapping_add(nh_pair(rd64(b, 16 * p), rd64(b, 16 * p + 8), k[2 * p], k[2 * p + 1]));
+    }
+    let q = pairs - 1;
+    acc1 = acc1.wrapping_add(nh_pair(rd64(b, len - 16), rd64(b, len - 8), k[2 * q], k[2 * q + 1]));
+    acc0.wrapping_add(acc1)
+}
+
+#[inline]
+pub fn hash(k: &Keys, data: &[u8]) -> u64 {
+    let len = data.len();
+    if len <= BLOCK_BYTES {
+        let acc = nh_partial(&k.nh, data).wrapping_add(nh_pair(
+            len as u64,
+            0,
+            k.nh[2 * PAIRS],
+            k.nh[2 * PAIRS + 1],
+        ));
+        return fmix64(ms(k.m, acc) ^ k.fin);
+    }
+    hash_long(k, data)
+}
+
+#[inline(never)]
+fn hash_long(k: &Keys, data: &[u8]) -> u64 {
+    let mut h = 0u64;
+    let mut t = 0u64;
+    let mut absorb = |acc: u128| {
+        let lo = acc as u64;
+        let hi = (acc >> 64) as u64;
+        h = horner(h, k.r, lo & LIMB_MASK);
+        h = horner(h, k.r, ((lo >> 60) | (hi << 4)) & LIMB_MASK);
+        h = horner(h, k.r, hi >> 56);
+        t = t.wrapping_add(hi);
+    };
+    let mut blocks = data.chunks_exact(BLOCK_BYTES);
+    for b in &mut blocks {
+        absorb(nh_full_block(&k.nh, b));
+    }
+    let rem = blocks.remainder().len();
+    if rem > 0 {
+        // 端数は直前のブロックと重ねて末尾 rem バイトぶんの組を読む（len > 1024 なので常に 16 バイト以上ある）
+        let tail = &data[data.len() - rem.max(16)..];
+        absorb(nh_partial(&k.nh, tail));
+    }
+    let h = horner(h, k.r, data.len() as u64);
+    fmix64(((h << 3) | (t >> 61)) ^ k.fin)
+}
+
+// ---------------------------------------------------------------------------
+// 試作2b: 長い入力を NH32 の Toeplitz 2 本（鍵を 1 レーンずらす）で処理する。
+// 1 レーン = 64bit = (偶数語, 奇数語) の u32 組。積は 32×32→64 なので AVX2/AVX-512 の vpmuludq に乗る。
+// 1 本の NH32 は ε = 2^-32、鍵をずらした 2 本で ε = 2^-64（UMAC の Toeplitz 構成）。
+
+const M32: u64 = 0xffff_ffff;
+
+/// 1 レーン分の NH32: (lo(v)+lo(k)) * (hi(v)+hi(k))、各和は mod 2^32。
+#[inline(always)]
+fn nh32_lane(v: u64, k: u64) -> u64 {
+    let lo = v.wrapping_add(k) & M32; // 下位 32bit は繰り上がりの影響を受けない
+    let hi = ((v >> 32) + (k >> 32)) & M32;
+    lo * hi
+}
+
+#[inline(always)]
+fn nh32x2_full_block(k: &[u64; KEY_WORDS], b: &[u8]) -> (u64, u64) {
+    let b: &[u8; BLOCK_BYTES] = b.try_into().unwrap();
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    {
+        // SAFETY: avx2 はコンパイル時に有効。読み込みはすべて b（1024B）と k（130 語）の範囲内。
+        unsafe { nh32x2_block_avx2(k, b) }
+    }
+    #[cfg(not(all(target_arch = "x86_64", target_feature = "avx2")))]
+    {
+        nh32x2_block_scalar(k, b)
+    }
+}
+
+#[allow(dead_code)]
+#[inline(always)]
+fn nh32x2_block_scalar(k: &[u64; KEY_WORDS], b: &[u8; BLOCK_BYTES]) -> (u64, u64) {
+    let mut a1 = [0u64; 8];
+    let mut a2 = [0u64; 8];
+    for c in 0..BLOCK_BYTES / 64 {
+        for j in 0..8 {
+            let i = 8 * c + j;
+            let v = u64::from_le_bytes(b[8 * i..8 * i + 8].try_into().unwrap());
+            a1[j] = a1[j].wrapping_add(nh32_lane(v, k[i]));
+            a2[j] = a2[j].wrapping_add(nh32_lane(v, k[i + 1]));
+        }
+    }
+    (a1.iter().fold(0u64, |s, x| s.wrapping_add(*x)), a2.iter().fold(0u64, |s, x| s.wrapping_add(*x)))
+}
+
+/// AVX2 版。1 命令で 4 レーン: `_mm256_add_epi32` が各 u32 の mod 2^32 加算、
+/// `_mm256_mul_epu32(s, s >> 32)` が各レーンの lo(s)·hi(s)（32×32→64）。
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+#[inline(always)]
+unsafe fn nh32x2_block_avx2(k: &[u64; KEY_WORDS], b: &[u8; BLOCK_BYTES]) -> (u64, u64) {
+    use core::arch::x86_64::*;
+    let mut a1 = [_mm256_setzero_si256(); 2];
+    let mut a2 = [_mm256_setzero_si256(); 2];
+    let bp = b.as_ptr() as *const __m256i;
+    let kp = k.as_ptr();
+    for i in 0..BLOCK_BYTES / 32 {
+        let v = _mm256_loadu_si256(bp.add(i));
+        let k1 = _mm256_loadu_si256(kp.add(4 * i) as *const __m256i);
+        let k2 = _mm256_loadu_si256(kp.add(4 * i + 1) as *const __m256i);
+        let s1 = _mm256_add_epi32(v, k1);
+        let s2 = _mm256_add_epi32(v, k2);
+        let p1 = _mm256_mul_epu32(s1, _mm256_srli_epi64::<32>(s1));
+        let p2 = _mm256_mul_epu32(s2, _mm256_srli_epi64::<32>(s2));
+        a1[i % 2] = _mm256_add_epi64(a1[i % 2], p1);
+        a2[i % 2] = _mm256_add_epi64(a2[i % 2], p2);
+    }
+    let mut o1 = [0u64; 4];
+    let mut o2 = [0u64; 4];
+    _mm256_storeu_si256(o1.as_mut_ptr() as *mut __m256i, _mm256_add_epi64(a1[0], a1[1]));
+    _mm256_storeu_si256(o2.as_mut_ptr() as *mut __m256i, _mm256_add_epi64(a2[0], a2[1]));
+    (
+        o1.iter().fold(0u64, |s, x| s.wrapping_add(*x)),
+        o2.iter().fold(0u64, |s, x| s.wrapping_add(*x)),
+    )
+}
+
+#[allow(unused_assignments)]
+/// 長さ 8..=1024 の端数の NH32x2。32 バイト単位は SIMD、残りのレーンはスカラー、最後のレーンは末尾 8 バイトから重ねて読む。
+#[inline(always)]
+fn nh32x2_partial(k: &[u64; KEY_WORDS], b: &[u8]) -> (u64, u64) {
+    let len = b.len();
+    let lanes = len.div_ceil(8);
+    #[allow(unused_mut)]
+    let (mut s1, mut s2, mut i) = (0u64, 0u64, 0usize);
+    #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+    unsafe {
+        // SAFETY: 読むのは b[0..32*chunks] と k[0..4*chunks+5]（chunks*4 ≤ lanes-1 ≤ 127）
+        use core::arch::x86_64::*;
+        let chunks = (lanes - 1) / 4;
+        let mut a1 = _mm256_setzero_si256();
+        let mut a2 = _mm256_setzero_si256();
+        for c in 0..chunks {
+            let v = _mm256_loadu_si256(b.as_ptr().add(32 * c) as *const __m256i);
+            let k1 = _mm256_loadu_si256(k.as_ptr().add(4 * c) as *const __m256i);
+            let k2 = _mm256_loadu_si256(k.as_ptr().add(4 * c + 1) as *const __m256i);
+            let x1 = _mm256_add_epi32(v, k1);
+            let x2 = _mm256_add_epi32(v, k2);
+            a1 = _mm256_add_epi64(a1, _mm256_mul_epu32(x1, _mm256_srli_epi64::<32>(x1)));
+            a2 = _mm256_add_epi64(a2, _mm256_mul_epu32(x2, _mm256_srli_epi64::<32>(x2)));
+        }
+        let mut o = [0u64; 8];
+        _mm256_storeu_si256(o.as_mut_ptr() as *mut __m256i, a1);
+        _mm256_storeu_si256(o.as_mut_ptr().add(4) as *mut __m256i, a2);
+        s1 = o[0].wrapping_add(o[1]).wrapping_add(o[2].wrapping_add(o[3]));
+        s2 = o[4].wrapping_add(o[5]).wrapping_add(o[6].wrapping_add(o[7]));
+        i = 4 * chunks;
+    }
+    while i < lanes {
+        let v = if i + 1 == lanes { rd64(b, len - 8) } else { rd64(b, 8 * i) };
+        s1 = s1.wrapping_add(nh32_lane(v, k[i]));
+        s2 = s2.wrapping_add(nh32_lane(v, k[i + 1]));
+        i += 1;
+    }
+    (s1, s2)
+}
+
+/// 試作2c。32 バイト以下は NH64（`hash` と同じ）、33..=1024 は NH32x2 + 長さレーン → multiply-shift、
+/// それより長い入力は 2b と同じ。
+#[inline]
+pub fn hash_c(k: &Keys, data: &[u8]) -> u64 {
+    let len = data.len();
+    if len <= 32 {
+        return hash(k, data);
+    }
+    if len <= BLOCK_BYTES {
+        let (x, y) = nh32x2_partial(&k.nh, data);
+        // 長さレーン（鍵は最後の 2 語）を足す
+        let x = x.wrapping_add(nh32_lane(len as u64, k.nh[KEY_WORDS - 2]));
+        let y = y.wrapping_add(nh32_lane(len as u64, k.nh[KEY_WORDS - 1]));
+        return fmix64(ms(k.m, ((y as u128) << 64) | x as u128) ^ k.fin);
+    }
+    hash_long_b(k, data)
+}
+
+/// 試作2b。1 ブロック以内は `hash` と同じ（NH64 + multiply-shift）、それより長い入力だけ NH32x2。
+#[inline]
+pub fn hash_b(k: &Keys, data: &[u8]) -> u64 {
+    if data.len() <= BLOCK_BYTES {
+        return hash(k, data);
+    }
+    hash_long_b(k, data)
+}
+
+#[inline(never)]
+fn hash_long_b(k: &Keys, data: &[u8]) -> u64 {
+    let mut h = 0u64;
+    let mut t = 0u64;
+    let mut absorb = |(x, y): (u64, u64)| {
+        h = horner(h, k.r, x & LIMB_MASK);
+        h = horner(h, k.r, ((x >> 60) | (y << 4)) & LIMB_MASK);
+        h = horner(h, k.r, y >> 56);
+        t = t.wrapping_add(y);
+    };
+    let mut blocks = data.chunks_exact(BLOCK_BYTES);
+    for b in &mut blocks {
+        absorb(nh32x2_full_block(&k.nh, b));
+    }
+    let rem = blocks.remainder().len();
+    if rem > 0 {
+        absorb(nh32x2_partial(&k.nh, &data[data.len() - rem.max(8)..]));
+    }
+    let h = horner(h, k.r, data.len() as u64);
+    fmix64(((h << 3) | (t >> 61)) ^ k.fin)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn distinct_on_small_structured_inputs() {
+        // 0 埋めと紛らわしい入力、重なり読みの境界（3/4/8/9/16/17/1024/1025 バイト付近）で衝突しないこと
+        let k = Keys::from_seed(5);
+        let mut seen = HashSet::new();
+        for n in 0..2100 {
+            assert!(seen.insert(hash(&k, &vec![0u8; n])), "zeros len {n}");
+        }
+        for n in 0..40usize {
+            for pos in 0..n {
+                for v in [1u8, 0x80, 0xff] {
+                    let mut x = vec![0u8; n];
+                    x[pos] = v;
+                    assert!(seen.insert(hash(&k, &x)), "len {n} pos {pos} v {v}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nh32_lane_matches_definition() {
+        let mut s = 9u64;
+        for _ in 0..100_000 {
+            let v = splitmix64(&mut s);
+            let k = splitmix64(&mut s);
+            let lo = (v as u32).wrapping_add(k as u32) as u64;
+            let hi = ((v >> 32) as u32).wrapping_add((k >> 32) as u32) as u64;
+            assert_eq!(nh32_lane(v, k), lo * hi);
+        }
+    }
+
+    #[test]
+    fn simd_block_matches_scalar() {
+        let k = Keys::from_seed(21);
+        let mut s = 1u64;
+        for _ in 0..200 {
+            let b: Vec<u8> = (0..BLOCK_BYTES).map(|_| splitmix64(&mut s) as u8).collect();
+            let b: &[u8; BLOCK_BYTES] = b.as_slice().try_into().unwrap();
+            assert_eq!(nh32x2_full_block(&k.nh, b), nh32x2_block_scalar(&k.nh, b));
+        }
+    }
+
+    #[test]
+    fn partial_simd_matches_scalar() {
+        let k = Keys::from_seed(22);
+        let mut s = 2u64;
+        for len in 8..=BLOCK_BYTES {
+            let b: Vec<u8> = (0..len).map(|_| splitmix64(&mut s) as u8).collect();
+            let lanes = len.div_ceil(8);
+            let (mut s1, mut s2) = (0u64, 0u64);
+            for i in 0..lanes {
+                let v = if i + 1 == lanes { rd64(&b, len - 8) } else { rd64(&b, 8 * i) };
+                s1 = s1.wrapping_add(nh32_lane(v, k.nh[i]));
+                s2 = s2.wrapping_add(nh32_lane(v, k.nh[i + 1]));
+            }
+            assert_eq!(nh32x2_partial(&k.nh, &b), (s1, s2), "len {len}");
+        }
+    }
+
+    #[test]
+    fn every_byte_matters_c() {
+        let k = Keys::from_seed(13);
+        for n in [33usize, 40, 63, 64, 65, 100, 128, 129, 1000, 1024, 1025, 3000] {
+            let base: Vec<u8> = (0..n).map(|i| (i * 7 + 3) as u8).collect();
+            let h0 = hash_c(&k, &base);
+            for pos in 0..n {
+                let mut x = base.clone();
+                x[pos] ^= 1;
+                assert_ne!(hash_c(&k, &x), h0, "len {n} pos {pos}");
+            }
+        }
+        let mut seen = std::collections::HashSet::new();
+        for n in 0..2100 {
+            assert!(seen.insert(hash_c(&k, &vec![0u8; n])), "zeros len {n}");
+        }
+    }
+
+    #[test]
+    fn every_byte_matters_b() {
+        let k = Keys::from_seed(12);
+        for n in [1025usize, 1031, 1032, 1033, 2048, 2049, 5000] {
+            let base: Vec<u8> = (0..n).map(|i| (i * 7 + 3) as u8).collect();
+            let h0 = hash_b(&k, &base);
+            for pos in 0..n {
+                let mut x = base.clone();
+                x[pos] ^= 1;
+                assert_ne!(hash_b(&k, &x), h0, "len {n} pos {pos}");
+            }
+        }
+    }
+
+    #[test]
+    fn every_byte_matters_across_paths() {
+        let k = Keys::from_seed(11);
+        for n in [1usize, 2, 3, 4, 7, 8, 9, 15, 16, 17, 31, 32, 33, 1023, 1024, 1025, 1040, 3000] {
+            let base: Vec<u8> = (0..n).map(|i| (i * 7 + 3) as u8).collect();
+            let h0 = hash(&k, &base);
+            for pos in 0..n {
+                let mut x = base.clone();
+                x[pos] ^= 1;
+                assert_ne!(hash(&k, &x), h0, "len {n} pos {pos}");
+            }
+        }
+    }
+}

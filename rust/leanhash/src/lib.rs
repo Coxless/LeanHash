@@ -17,7 +17,7 @@
 pub const P: u64 = (1 << 61) - 1;
 pub const BLOCK_BYTES: usize = 128;
 const BLOCK_WORDS: usize = BLOCK_BYTES / 8;
-const LIMB_MASK: u64 = (1 << 60) - 1;
+pub(crate) const LIMB_MASK: u64 = (1 << 60) - 1;
 
 /// 鍵。NH 用 16 語（`Nh32` はこれを 32 個の u32 として使う）、多項式の評価点 r ∈ [0, p)、出力の白色化 fin。
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ pub struct Keys {
     pub fin: u64,
 }
 
-fn splitmix64(state: &mut u64) -> u64 {
+pub(crate) fn splitmix64(state: &mut u64) -> u64 {
     *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
     let mut z = *state;
     z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -78,7 +78,7 @@ pub fn mulmod(a: u64, b: u64) -> u64 {
 
 /// h < p、c < 2^60 のとき h·r + c mod p。
 #[inline(always)]
-fn horner(h: u64, r: u64, c: u64) -> u64 {
+pub(crate) fn horner(h: u64, r: u64, c: u64) -> u64 {
     reduce(mulmod(h, r) + c)
 }
 
@@ -210,6 +210,8 @@ pub fn hash_nh32(k: &Keys, data: &[u8]) -> u64 {
     }
     p.finish(k, data.len())
 }
+
+pub mod v2;
 
 #[cfg(test)]
 mod tests {
