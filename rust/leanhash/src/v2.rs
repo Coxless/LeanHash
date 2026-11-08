@@ -316,12 +316,22 @@ fn hash_long_b(k: &Keys, data: &[u8]) -> u64 {
     for b in &mut blocks {
         absorb(nh32x2_full_block(&k.nh, b));
     }
+    // 最後の NH には長さレーン（鍵の位置 128、Toeplitz の並びのまま）を必ず足す。
+    // 長さを多項式の定数項だけで入れると、0 埋め入力の L と L+1 で出力前の値が +1 しか違わず、
+    // SMHasher3 の SeedZeroes（差分分布）で偏りが出た（journal 参照）。
+    let len = data.len() as u64;
     let rem = blocks.remainder().len();
-    if rem > 0 {
-        absorb(nh32x2_partial(&k.nh, &data[data.len() - rem.max(8)..]));
-    }
-    let h = horner(h, k.r, data.len() as u64);
-    fmix64(((h << 3) | (t >> 61)) ^ k.fin)
+    let (mut x, mut y) = if rem > 0 {
+        nh32x2_partial(&k.nh, &data[data.len() - rem.max(8)..])
+    } else {
+        (0, 0)
+    };
+    x = x.wrapping_add(nh32_lane(len, k.nh[KEY_WORDS - 2]));
+    y = y.wrapping_add(nh32_lane(len, k.nh[KEY_WORDS - 1]));
+    absorb((x, y));
+    let h = horner(h, k.r, len);
+    // 仕上げは 1 ブロック以内と同じ multiply-shift → fmix64（(h, t) ↦ 128bit は単射）
+    fmix64(ms(k.m, ((h as u128) << 64) | t as u128) ^ k.fin)
 }
 
 #[cfg(test)]
