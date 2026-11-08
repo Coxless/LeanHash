@@ -127,3 +127,21 @@ SMHasher3 の一覧で見つけた。foldhash と同じ作者（orlp）の、多
 | 1MB | ≈ 2⁻⁶⁴ + 3073/2⁶¹ ≈ 2⁻⁴⁹·⁴ | ≤ 2⁻⁴⁰·² |
 
 → 差別化の軸は「**機械検証された証明**」と「**長さに強い上界**」。速度は PolymurHash とも比べる（SMHasher3 の速度テストと Rust の `polymur-hash` クレート）
+
+### 速度（SMHasher3 `--test=Speed`、`taskset -c 2`、1 本ずつ順に実行）
+
+生データ: `bench/results/2026-11-08-smhasher3-speed/`。SMHasher3 の bulk は 256KB の入力（L2 に収まる）で、Rust 側の計測（2MB のバッファ上で開始位置をずらす）より全体に速く出る。「@ 3.5 ghz」は SMHasher3 が仮定する換算で、実周波数ではない。
+
+| ハッシュ | 1〜31B 平均（cycles/hash） | bulk（bytes/cycle） | v2c との比（bulk） |
+| :--- | ---: | ---: | ---: |
+| **LeanHash-v2c** | 30.2 | 10.2 | 1.00 |
+| LeanHash-v1（素朴版） | 99.0 | 2.7 | 0.26 |
+| XXH3-64 | 22.3 | 25.3 | 2.48 |
+| rapidhash | 19.3 | 15.2 | 1.49 |
+| CLhash.bitmix | 36.9 | 16.0 | 1.56 |
+| polymurhash | 29.0 | 5.7 | 0.56 |
+| rust-ahash（C++ への移植版） | 48.1 | 4.5 | 0.44 |
+
+- LeanHash は FFI 越しの呼び出しなので、短い入力では数サイクル不利（C++ に移植された競合はインライン化される）
+- **短い入力は PolymurHash と同等で、長い入力は約 1.8 倍速い**。XXH3 には長い入力で約 40%、短い入力で約 74%
+- rust-ahash は SMHasher3 の C++ 移植（AES 版でもこの値）で、Rust ネイティブの ahash（Rust 側の計測では XXH3 に近い）とは大きく違う。ahash との比較は Rust 側の数字を使う

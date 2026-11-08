@@ -39,3 +39,27 @@ Average        -    19.29 cycles/hash
 
 Bulk speed test - 262144-byte keys
 Alignment   7 - 15.21 bytes/cycle - 49.58 GiB/sec @ 3.5 ghz
+Alignment   6 - 15.16 bytes/cycle - 49.43 GiB/sec @ 3.5 ghz
+Alignment   5 - 15.14 bytes/cycle - 49.35 GiB/sec @ 3.5 ghz
+Alignment   4 - 15.31 bytes/cycle - 49.91 GiB/sec @ 3.5 ghz
+Alignment   3 - 15.15 bytes/cycle - 49.39 GiB/sec @ 3.5 ghz
+Alignment   2 - 15.15 bytes/cycle - 49.40 GiB/sec @ 3.5 ghz
+Alignment   1 - 15.17 bytes/cycle - 49.44 GiB/sec @ 3.5 ghz
+Alignment   0 - 15.46 bytes/cycle - 50.39 GiB/sec @ 3.5 ghz
+Average       - 15.22 bytes/cycle - 49.61 GiB/sec @ 3.5 ghz
+Alignment rnd - 15.19 bytes/cycle - 49.50 GiB/sec @ 3.5 ghz
+
+Bulk speed test - [262017, 262144]-byte keys
+Alignment   7 - 15.10 bytes/cycle - 49.23 GiB/sec @ 3.5 ghz
+Alignment   6 -  9.49 bytes/cycle - 30.93 GiB/sec @ 3.5 ghz
+Alignment   5 - 15.04 bytes/cycle - 49.03 GiB/sec @ 3.5 ghz
+Alignment   4 - 11.17 bytes/cycle - 36.40 GiB/sec @ 3.5 ghz
+Alignment   3 - 15.11 bytes/cycle - 49.24 GiB/sec @ 3.5 ghz
+Alignment   2 - 15.09 bytes/cycle - 49.20 GiB/sec @ 3.5 ghz
+Alignment   1 - 15.07 bytes/cycle - 49.13 GiB/sec @ 3.5 ghz
+Alignment   0 - 15.39 bytes/cycle - 50.17 GiB/sec @ 3.5 ghz
+Average       - 13.93 bytes/cycle - 45.42 GiB/sec @ 3.5 ghz
+Alignment rnd - 14.80 bytes/cycle - 48.26 GiB/sec @ 3.5 ghz
+
+Verification value is 0x00000001 - Testing took 129.190834 seconds
+
