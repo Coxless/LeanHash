@@ -67,6 +67,7 @@ dependencies = [
  "cc",
  "foldhash",
  "leanhash",
+ "polymur-hash",
  "rapidhash",
  "xxhash-rust",
 ]
@@ -89,6 +90,12 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "polymur-hash"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9e954ef8c70de39336888bbcc2e18ff813b369ccdb5dda663a81f9d93c35c33"
 
 [[package]]
 name = "proc-macro2"

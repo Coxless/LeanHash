@@ -37,6 +37,7 @@ fn hashers(seed: u64) -> Vec<(&'static str, HashFn)> {
     let fold = foldhash::fast::FixedState::with_seed(seed);
     let foldq = foldhash::quality::FixedState::with_seed(seed);
     let ah = ahash::RandomState::with_seeds(seed, 1, 2, 3);
+    let poly = polymur_hash::PolymurHash::from_u64_seed(seed);
     #[allow(unused_mut)]
     let mut v: Vec<(&'static str, HashFn)> = vec![
         ("leanhash-v2", Box::new(move |d| leanhash::v2::hash(&kv2, d))),
@@ -56,6 +57,7 @@ fn hashers(seed: u64) -> Vec<(&'static str, HashFn)> {
             h.write(d);
             h.finish()
         })),
+        ("polymurhash", Box::new(move |d| poly.hash(d))),
         ("ahash", Box::new(move |d| {
             let mut h = ah.build_hasher();
             h.write(d);

@@ -32,6 +32,8 @@
 
 ### 1.2 空白地帯（＝本プロジェクトの新規性）
 
+最も近い先行例は **PolymurHash**（多項式 mod 2⁶¹−1、n バイトで衝突確率 ≤ n·2⁻⁶⁰·²、証明は手書き）。P0' で見つけた（[journal](docs/journal/2026-11-08-p0prime-prototype.md)）。LeanHash との差は「機械検証」と「NH 段による長さに強い上界」。
+
 先行研究調査で見つからなかったもの:
 
 - 非暗号ハッシュ（xxHash、rapidhash 等）の実装検証
@@ -88,7 +90,7 @@
 
 - SMHasher3 全通過
 - 下位ビットの偏りのなさ
-- 速度: 長い入力で XXH3 / rapidhash の 50% 以上（仮置き。P0' で確定）
+- 速度: 長い入力で XXH3 / rapidhash の 50% 以上（仮置き。P0' の提案は 7 章と journal を参照）
 
 ### 4.3 狙わないもの
 
@@ -123,7 +125,8 @@ LeanHash/
 ├─ Impl/{Fast,Equiv}.lean                    -- 最適化版と eval fast = spec
 ├─ Streaming/                                -- Aeneas 抽出物と分割非依存性の証明
 └─ Test/Vectors.lean
-rust/leanhash/                               -- crate（kernel は生成コード、外側は手書き safe Rust）
+rust/leanhash/                               -- crate（kernel は生成コード、外側は手書き safe Rust。P0' の手書き試作もここ）
+bench/                                       -- SMHasher3 への組み込み、計測結果
 ```
 
 証明戦略:
@@ -140,7 +143,7 @@ rust/leanhash/                               -- crate（kernel は生成コー�
 
 | 段階 | 内容 | ゲート |
 | :--- | :--- | :--- |
-| **P0' 試作（約2週間）** | Rust で NH＋fmix64 の素朴版。SMHasher3 と速度を foldhash / ahash / XXH3 / rapidhash / CLHASH と比較。CLHASH の論文値も再現 | **速度目標と ε 目標を数値で決定**（進むか判断） |
+| **P0' 試作（約2週間）** | Rust で NH＋fmix64 の素朴版。SMHasher3 と速度を foldhash / ahash / XXH3 / rapidhash / CLHASH と比較。CLHASH の論文値も再現 | **速度目標と ε 目標を数値で決定**（進むか判断）→ 試作 v2c で SMHasher3 全 PASS、目標を提案済み・判断待ち（[journal](docs/journal/2026-11-08-p0prime-prototype.md)） |
 | P0 Lean 準備（並行） | Lean 4 / Mathlib 環境、BitVec と bv_decide | xorshift 自己逆の定理 ✅ `LeanHash/Spec/Mix.lean` |
 | P1 仕上げ段 | fmix64 の仕様・逆関数・左右逆 | fmix64 全単射の定理 |
 | P2 圧縮段（中心） | 固定長 NH の ε-AU を数え上げで証明、8〜16bit 版で全数照合 | ε-AU 定理と実測が一致 |
@@ -153,8 +156,9 @@ rust/leanhash/                               -- crate（kernel は生成コー�
 
 ## 8. 未解決の問い
 
-- [ ] 速度目標の妥当性 → P0' で決める
-- [ ] ε の目標（2⁻³² か 2⁻⁶⁴ 寄りか）→ P0' で決める
+- [ ] 速度目標の妥当性 → P0' で提案（≤32B: rapidhash の 0.6 倍、64B〜1KB: 0.8 倍、≥4KB: XXH3 の 0.5 倍、PolymurHash 以上）。判断待ち
+- [ ] ε の目標 → P0' で「2⁻⁶⁴ 寄り」を提案（≤1KB で 2⁻⁶²、長い入力で 2⁻⁶³ + (3n+1)/p）。判断待ち
+- [ ] Hasher に約 1KB の鍵をどう渡すか（P3.5 の設計に直結）
 - [ ] 通常乗算（NH）か繰り上がりなし乗算（CLHASH）か
 - [x] 任意長入力 → NH（固定長）＋多項式 mod 2⁶¹−1 の二段構成（UMAC/VHASH 型）を採用候補
 - [ ] 下位 b ビットまで証明すべきか（するなら multiply-shift 系の構成が必要）

@@ -9,6 +9,7 @@ publish.workspace = true
 ahash = "0.8.12"
 foldhash = "0.2.0"
 leanhash = { path = "../leanhash" }
+polymur-hash = "0.2.3"
 rapidhash = "4.5.1"
 xxhash-rust = { version = "0.8.19", features = ["xxh3"] }
 
