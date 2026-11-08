@@ -50,3 +50,4 @@ workshop shell dev
 - 初回 `launch` は Mathlib キャッシュ（数GB）と SMHasher3 のビルドで時間がかかる。`verify` は Aeneas のビルドでさらに 30 分以上かかる。
 - Aeneas の Lean ライブラリ（固定コミット）は Lean v4.35.0 / Mathlib v4.35.0 を要求するため、本体の `lean-toolchain` も同じ版に揃えている。版を上げるときは `.workshop/versions.sh` の `AENEAS_REV` と一緒に動かす。
 - `.workshop.lock` は launch 時に生成され、git 管理外。
+- 試行錯誤の記録は `docs/journal/`（ルールは `CLAUDE.md`）。
