@@ -235,6 +235,22 @@ mod tests {
         assert_eq!(0xc4ce_b9fe_1a85_ec53u64.wrapping_mul(0x9cb4_b2f8_1293_37db), 1);
     }
 
+    /// Lean の仕様（`LeanHash/Spec/Fmix.lean` の `example`）と同じテストベクトル。
+    #[test]
+    fn fmix64_matches_lean_vectors() {
+        let v: [(u64, u64); 5] = [
+            (0x0000000000000000, 0x0000000000000000),
+            (0x0000000000000001, 0xb456bcfc34c2cb2c),
+            (0x8000000000000000, 0x8f780810af31a493),
+            (0x0123456789abcdef, 0x87cbfbfe89022cea),
+            (0xffffffffffffffff, 0x64b5720b4b825f21),
+        ];
+        for (x, y) in v {
+            assert_eq!(fmix64(x), y);
+            assert_eq!(fmix64_inv(y), x);
+        }
+    }
+
     #[test]
     fn fmix64_roundtrip() {
         let mut s = 1u64;
