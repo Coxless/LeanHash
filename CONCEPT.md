@@ -146,7 +146,7 @@ bench/                                       -- SMHasher3 への組み込み、�
 | **P0' 試作（約2週間）** | Rust で NH＋fmix64 の素朴版。SMHasher3 と速度を foldhash / ahash / XXH3 / rapidhash / CLHASH と比較。CLHASH の論文値も再現 | **速度目標と ε 目標を数値で決定**（進むか判断）→ 試作 v2c で SMHasher3 全 PASS、目標を承認（2026-11-08）✅（[journal](docs/journal/2026-11-08-p0prime-prototype.md)） |
 | P0 Lean 準備（並行） | Lean 4 / Mathlib 環境、BitVec と bv_decide | xorshift 自己逆の定理 ✅ `LeanHash/Spec/Mix.lean` |
 | P1 仕上げ段 | fmix64 の仕様・逆関数・左右逆 | fmix64 全単射の定理 ✅ `LeanHash/Spec/Fmix.lean`（[journal](docs/journal/2026-11-08-p1-fmix64.md)） |
-| P2 圧縮段（中心） | 固定長 NH の ε-AU を数え上げで証明、8〜16bit 版で全数照合 | ε-AU 定理と実測が一致 → 教科書どおりの NH の (1/W)-AU を証明 ✅ `LeanHash/Props/NH.lean`、全数照合は 1 組 9bit・2 組 4bit・16bit は抜き取りで一致（上界は tight）。v2c の構成（NH32 2 本、端数、仕上げ）とのすき間は残る（[journal](docs/journal/2026-11-08-p2-nh-eau.md)） |
+| P2 圧縮段（中心） | 固定長 NH の ε-AU を数え上げで証明、8〜16bit 版で全数照合 | ε-AU 定理と実測が一致 → 教科書どおりの NH の (1/W)-AU を証明 ✅ `LeanHash/Props/NH.lean`、全数照合は 1 組 9bit・2 組 4bit・16bit は抜き取りで一致（上界は tight）。1/W がちょうどの値であること（下限）も証明 ✅ `LeanHash/Props/NHLower.lean`（[journal](docs/journal/2026-11-09-p2-nh-lower.md)）。v2c の構成（NH32 2 本、端数、仕上げ）とのすき間は残る（[journal](docs/journal/2026-11-08-p2-nh-eau.md)） |
 | P2.5 多項式段 | mod 2⁶¹−1 の多項式ハッシュの ε-AU（ε ≤ ℓ/p）と2段の合成 | 定理 |
 | P3 結合と Rust 出力 | 合成則、HashIR と EmitRust（`wrapping_*`、`u128`、`std::arch`）、eval fast = spec | 差分テストで全一致 |
 | P3.5 外側処理の検証 | `Hasher::write` のバッファリング・端数・長さ符号化を safe Rust で書き、Aeneas で抽出して分割非依存性を証明 | 定理（詰まれば差分テスト・ファジングで代替） |
@@ -163,7 +163,7 @@ bench/                                       -- SMHasher3 への組み込み、�
 - [x] 任意長入力 → NH（固定長）＋多項式 mod 2⁶¹−1 の二段構成（UMAC/VHASH 型）を採用候補
 - [ ] 下位 b ビットまで証明すべきか（するなら multiply-shift 系の構成が必要）
 - [ ] Aeneas が外側処理（スライス操作、ループ）をどこまで抽出できるか → P3.5 の最初に小さな例で確認
-- [ ] NH より ε の小さい圧縮段の構成 → NH 1 本の ε = 1/W はちょうどの値で、これ以上は縮められない（1 語だけ違う組で等号。出力 W² 通りに対する下限は約 1/W² なので、出力の半分ぶんの強さを捨てている）。**当面は v2c の構成（NH32×2 など）のまま進め、別の構成は今後の改善として検討する**（2026-11-09 決定、[journal](docs/journal/2026-11-08-p2-nh-eau.md)）
+- [ ] NH より ε の小さい圧縮段の構成 → NH 1 本の ε = 1/W はちょうどの値で、これ以上は縮められない（1 語だけ違う組で等号。Lean で証明済み: `nh_eps_exact`、[journal](docs/journal/2026-11-09-p2-nh-lower.md)。出力 W² 通りに対する下限は約 1/W² なので、出力の半分ぶんの強さを捨てている）。**当面は v2c の構成（NH32×2 など）のまま進め、別の構成は今後の改善として検討する**（2026-11-09 決定、[journal](docs/journal/2026-11-08-p2-nh-eau.md)）
 
 ---
 
