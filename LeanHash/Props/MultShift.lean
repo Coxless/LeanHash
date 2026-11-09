@@ -137,12 +137,12 @@ theorem ms_au (w l : ℕ) (hl : 1 ≤ l) (hlw : l ≤ w) (x y : ℕ) (hx : x < 2
       (t := range P ×ˢ range R) (fun a => (a / N, packNear N R (a * u % N))) ?_ ?_
     · simpa [Finset.card_product, hB] using hcard
     · intro a ha
-      simp only [Finset.coe_filter, Finset.mem_range, Set.mem_setOf_eq] at ha
+      simp only [Finset.coe_filter, Finset.mem_range, Set.mem_ofPred_eq] at ha
       simp only [Finset.coe_product, Finset.coe_range, Set.mem_prod, Set.mem_Iio]
       refine ⟨Nat.div_lt_of_lt_mul (by rw [mul_comm, ← hM]; exact ha.1), ?_⟩
       exact packNear_lt hNe hRe (hzodd a ha.2.1) (hzlt a) (hnear a ha.2.1 ha.2.2)
     · intro a ha a' ha' e
-      simp only [Finset.coe_filter, Finset.mem_range, Set.mem_setOf_eq] at ha ha'
+      simp only [Finset.coe_filter, Finset.mem_range, Set.mem_ofPred_eq] at ha ha'
       simp only [Prod.mk.injEq] at e
       have hz := packNear_inj hNe hRe h2R (hzodd a ha.2.1) (hzodd a' ha'.2.1) (hzlt a) (hzlt a')
         (hnear a ha.2.1 ha.2.2) (hnear a' ha'.2.1 ha'.2.2) e.2

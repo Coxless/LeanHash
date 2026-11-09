@@ -4,7 +4,8 @@
 //! - **L ≤ 1024（1 ブロック）:** 語の組 (a_i, b_i) と長さの組 (L, 0) に NH64 をかけて 128bit acc を得る。
 //!   acc を multiply-shift `hi64(m · acc mod 2^128)`（m は奇数の鍵）で 64bit に落とし、fin と XOR して fmix64。
 //!   語の取り出しは長さごとに単射（L ≤ 16 は xxh3 風の重なり読み、それ以上は最後の組を末尾 16 バイトから重ねて読む）。
-//!   ε ≤ ε_NH + 2^-63。ε_NH は同じ組数なら 2^-64、組数が違うときは約 2^-63（P2 で証明する）
+//!   ε ≤ ε_NH + 2^-63。ε_NH は組数によらず 2^-64（長さの組が最後の位置にあるため。Lean の `pathA_eps` / `pathB_eps`）。
+//!   経路をまたぐ 2 入力（A と B）は未証明（docs/journal/2026-11-09-p2-rest.md）
 //! - **L > 1024:** 1KB ごとの NH64（長さの組なし）→ 60bit limb で多項式 mod 2^61−1 → 長さ係数 →
 //!   `(h<<3 | t>>61) ^ fin` を fmix64。ε ≤ 2^-64 + (3n+1)/p
 
@@ -440,6 +441,126 @@ mod tests {
                 let mut x = base.clone();
                 x[pos] ^= 1;
                 assert_ne!(hash(&k, &x), h0, "len {n} pos {pos}");
+            }
+        }
+    }
+
+    /// Lean の仕様（`LeanHash/Spec/Encode.lean` の msgA / msgB、`Props/Toeplitz.lean` の nhO / nhT、
+    /// `Props/ShortPath.lean` の accA / accB → ms → fmix64）を素朴に写したもの。`hash_c` と全長で一致すること。
+    mod lean_spec {
+        use super::super::*;
+
+        fn byte_at(s: &[u8], i: usize) -> u128 {
+            s.get(i).copied().unwrap_or(0) as u128
+        }
+
+        fn read_le(k: usize, s: &[u8], o: usize) -> u128 {
+            (0..k).map(|j| byte_at(s, o + j) << (8 * j)).sum()
+        }
+
+        fn short_pair(s: &[u8]) -> (u128, u128) {
+            let l = s.len();
+            if 8 <= l {
+                (read_le(8, s, 0), read_le(8, s, l - 8))
+            } else if 4 <= l {
+                (read_le(4, s, 0), read_le(4, s, l - 4))
+            } else {
+                (byte_at(s, 0) + 256 * byte_at(s, l / 2) + 65536 * byte_at(s, l - 1), 0)
+            }
+        }
+
+        fn msg_a(s: &[u8]) -> Vec<Option<(u128, u128)>> {
+            let l = s.len();
+            (0..65)
+                .map(|i| {
+                    if i == 64 {
+                        Some((l as u128, 0))
+                    } else if i == 0 {
+                        if l == 0 {
+                            None
+                        } else if l <= 16 {
+                            Some(short_pair(s))
+                        } else {
+                            Some((read_le(8, s, 0), read_le(8, s, 8)))
+                        }
+                    } else if i == 1 && 16 < l {
+                        Some((read_le(8, s, l - 16), read_le(8, s, l - 8)))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
+
+        fn msg_b(s: &[u8]) -> Vec<Option<(u128, u128)>> {
+            let l = s.len();
+            let lanes = l.div_ceil(8);
+            (0..129)
+                .map(|i| {
+                    if i == 128 {
+                        Some((l as u128, 0))
+                    } else if i + 1 < lanes {
+                        Some((read_le(4, s, 8 * i), read_le(4, s, 8 * i + 4)))
+                    } else if i + 1 == lanes {
+                        Some((read_le(4, s, l - 8), read_le(4, s, l - 4)))
+                    } else {
+                        None
+                    }
+                })
+                .collect()
+        }
+
+        /// 有無つき NH：Σ ((m1+k1) mod W)·((m2+k2) mod W) mod W²（W = 2^bits）
+        fn nh_o(keys: &[(u128, u128)], msg: &[Option<(u128, u128)>], bits: u32) -> u128 {
+            let w = 1u128.checked_shl(bits);
+            let modw = |x: u128| match w {
+                Some(w) => x % w,
+                None => x,
+            };
+            let mut acc = 0u128;
+            for (m, k) in msg.iter().zip(keys) {
+                if let Some((m1, m2)) = m {
+                    let a = modw(m1.wrapping_add(k.0) & u64::MAX as u128);
+                    let b = modw(m2.wrapping_add(k.1) & u64::MAX as u128);
+                    let p = a.wrapping_mul(b);
+                    acc = if bits == 32 {
+                        (acc + p) & u64::MAX as u128
+                    } else {
+                        acc.wrapping_add(p)
+                    };
+                }
+            }
+            acc
+        }
+
+        pub fn hash_spec(k: &Keys, s: &[u8]) -> u64 {
+            let acc = if s.len() <= 32 {
+                let keys: Vec<(u128, u128)> =
+                    (0..65).map(|i| (k.nh[2 * i] as u128, k.nh[2 * i + 1] as u128)).collect();
+                nh_o(&keys, &msg_a(s), 64)
+            } else {
+                let lanes: Vec<(u128, u128)> = (0..130)
+                    .map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128))
+                    .collect();
+                let m = msg_b(s);
+                let x = nh_o(&lanes[..129], &m, 32);
+                let y = nh_o(&lanes[1..], &m, 32);
+                (y << 64) | x
+            };
+            fmix64(ms(k.m, acc) ^ k.fin)
+        }
+    }
+
+    #[test]
+    fn lean_spec_matches_hash_c() {
+        let mut s = 77u64;
+        for seed in [1u64, 2, 3] {
+            let k = Keys::from_seed(seed);
+            for len in 0..=BLOCK_BYTES {
+                for _ in 0..3 {
+                    let b: Vec<u8> = (0..len).map(|_| splitmix64(&mut s) as u8).collect();
+                    assert_eq!(lean_spec::hash_spec(&k, &b), hash_c(&k, &b), "seed {seed} len {len}");
+                }
             }
         }
     }
