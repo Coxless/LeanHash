@@ -5,7 +5,7 @@
 //!   acc を multiply-shift `hi64(m · acc mod 2^128)`（m は奇数の鍵）で 64bit に落とし、fin と XOR して fmix64。
 //!   語の取り出しは長さごとに単射（L ≤ 16 は xxh3 風の重なり読み、それ以上は最後の組を末尾 16 バイトから重ねて読む）。
 //!   ε ≤ ε_NH + 2^-63。ε_NH は組数によらず 2^-64（長さの組が最後の位置にあるため。Lean の `pathA_eps` / `pathB_eps`）。
-//!   経路をまたぐ 2 入力（A と B）は未証明（docs/journal/2026-11-09-p2-rest.md）
+//!   経路ごとに独立な fin（`fin` / `fin_mid` / `fin_long`）を使うので、経路をまたぐ 2 入力の衝突確率は 2^-64
 //! - **L > 1024:** 1KB ごとの NH64（長さの組なし）→ 60bit limb で多項式 mod 2^61−1 → 長さ係数 →
 //!   `(h<<3 | t>>61) ^ fin` を fmix64。ε ≤ 2^-64 + (3n+1)/p
 
@@ -21,7 +21,13 @@ pub struct Keys {
     /// multiply-shift の乗数（奇数）
     pub m: u128,
     pub r: u64,
+    /// 仕上げの XOR 定数。経路ごとに独立（経路をまたぐ 2 入力の衝突確率を 2^-64 にするため。
+    /// Lean の `card_out_collide`、docs/journal/2026-11-10-per-path-fin.md）。
+    /// `fin` は 1KB 以下の NH64 経路（`hash`。v2c では 32 バイト以下）、`fin_mid` は v2c の 33..=1024 の NH32x2 経路、
+    /// `fin_long` は 1KB より長い経路（`hash_long` / `hash_long_b`）
     pub fin: u64,
+    pub fin_mid: u64,
+    pub fin_long: u64,
 }
 
 impl Keys {
@@ -39,7 +45,10 @@ impl Keys {
             }
         };
         let fin = splitmix64(&mut s);
-        Keys { nh, m, r, fin }
+        // 既存の鍵の値を変えないよう、追加の鍵は最後に引く
+        let fin_mid = splitmix64(&mut s);
+        let fin_long = splitmix64(&mut s);
+        Keys { nh, m, r, fin, fin_mid, fin_long }
     }
 }
 
@@ -157,7 +166,7 @@ fn hash_long(k: &Keys, data: &[u8]) -> u64 {
         absorb(nh_partial(&k.nh, tail));
     }
     let h = horner(h, k.r, data.len() as u64);
-    fmix64(((h << 3) | (t >> 61)) ^ k.fin)
+    fmix64(((h << 3) | (t >> 61)) ^ k.fin_long)
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +298,7 @@ pub fn hash_c(k: &Keys, data: &[u8]) -> u64 {
         // 長さレーン（鍵は最後の 2 語）を足す
         let x = x.wrapping_add(nh32_lane(len as u64, k.nh[KEY_WORDS - 2]));
         let y = y.wrapping_add(nh32_lane(len as u64, k.nh[KEY_WORDS - 1]));
-        return fmix64(ms(k.m, ((y as u128) << 64) | x as u128) ^ k.fin);
+        return fmix64(ms(k.m, ((y as u128) << 64) | x as u128) ^ k.fin_mid);
     }
     hash_long_b(k, data)
 }
@@ -332,7 +341,7 @@ fn hash_long_b(k: &Keys, data: &[u8]) -> u64 {
     absorb((x, y));
     let h = horner(h, k.r, len);
     // 仕上げは 1 ブロック以内と同じ multiply-shift → fmix64（(h, t) ↦ 128bit は単射）
-    fmix64(ms(k.m, ((h as u128) << 64) | t as u128) ^ k.fin)
+    fmix64(ms(k.m, ((h as u128) << 64) | t as u128) ^ k.fin_long)
 }
 
 #[cfg(test)]
@@ -534,10 +543,10 @@ mod tests {
         }
 
         pub fn hash_spec(k: &Keys, s: &[u8]) -> u64 {
-            let acc = if s.len() <= 32 {
+            let (acc, fin) = if s.len() <= 32 {
                 let keys: Vec<(u128, u128)> =
                     (0..65).map(|i| (k.nh[2 * i] as u128, k.nh[2 * i + 1] as u128)).collect();
-                nh_o(&keys, &msg_a(s), 64)
+                (nh_o(&keys, &msg_a(s), 64), k.fin)
             } else {
                 let lanes: Vec<(u128, u128)> = (0..130)
                     .map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128))
@@ -545,9 +554,9 @@ mod tests {
                 let m = msg_b(s);
                 let x = nh_o(&lanes[..129], &m, 32);
                 let y = nh_o(&lanes[1..], &m, 32);
-                (y << 64) | x
+                ((y << 64) | x, k.fin_mid)
             };
-            fmix64(ms(k.m, acc) ^ k.fin)
+            fmix64(ms(k.m, acc) ^ fin)
         }
     }
 

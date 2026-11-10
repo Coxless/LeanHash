@@ -14,8 +14,8 @@ P2 のまとめ：v2c の 1KB 以下の 2 経路で、同じ経路に入る違�
 - multiply-shift: 2⁻⁶³（`ms_au`）
 - 仕上げ（^ fin、fmix64）: fin ごとに単射なので確率は変わらない（`out_eq_iff`）
 
-経路をまたぐ 2 入力（A と B）は、今の v2c（同じ m と fin）では証明していない。
-経路ごとに独立な fin を使えば 2⁻⁶⁴ ちょうど（`card_out_collide`）。
+経路をまたぐ 2 入力（A と B）は、経路ごとに独立な fin（Rust の `fin` / `fin_mid`）で 2⁻⁶⁴ ちょうど
+（`card_out_collide`）。両方をまとめた 1KB 以下の主定理は `Props/Le1K.lean` の `le1K_eps`。
 -/
 import LeanHash.Spec.Encode
 import LeanHash.Props.Toeplitz

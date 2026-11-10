@@ -9,3 +9,4 @@ import LeanHash.Props.Toeplitz
 import LeanHash.Props.MultShift
 import LeanHash.Props.Compose
 import LeanHash.Props.ShortPath
+import LeanHash.Props.Le1K
