@@ -121,8 +121,8 @@
 LeanHash/
 ├─ Spec/{Mix,NH,Poly}.lean                   -- BitVec / ZMod 上の純粋な仕様
 ├─ Props/{Bijective,Universal,Compose}.lean  -- 全単射、ε-AU、合成則
-├─ IR/{Syntax,Semantics,EmitRust,EmitC}.lean -- 直線型 DSL とコード出力
-├─ Impl/{Fast,Equiv}.lean                    -- 最適化版と eval fast = spec
+├─ IR/{Syntax,Semantics,EmitRust,EmitC}.lean -- 直線型 DSL とコード出力（EmitC 以外は P3 で作成）
+├─ Impl/{Kernels,Equiv,EmitMain}.lean        -- HashIR の核、eval fast = spec、`lake exe emit_rust`
 ├─ Streaming/                                -- Aeneas 抽出物と分割非依存性の証明
 └─ Test/Vectors.lean
 rust/leanhash/                               -- crate（kernel は生成コード、外側は手書き safe Rust。P0' の手書き試作もここ）
@@ -148,7 +148,7 @@ bench/                                       -- SMHasher3 への組み込み、�
 | P1 仕上げ段 | fmix64 の仕様・逆関数・左右逆 | fmix64 全単射の定理 ✅ `LeanHash/Spec/Fmix.lean`（[journal](docs/journal/2026-11-08-p1-fmix64.md)） |
 | P2 圧縮段（中心） | 固定長 NH の ε-AU を数え上げで証明、8〜16bit 版で全数照合 | ε-AU 定理と実測が一致 → 教科書どおりの NH の (1/W)-AU を証明 ✅ `LeanHash/Props/NH.lean`、全数照合は 1 組 9bit・2 組 4bit・16bit は抜き取りで一致（上界は tight）。1/W がちょうどの値であること（下限）も証明 ✅ `LeanHash/Props/NHLower.lean`（[journal](docs/journal/2026-11-09-p2-nh-lower.md)）。v2c の 1KB 以下の 2 経路（NH64 / NH32 の Toeplitz 2 本、端数の重ね読み、長さの組、multiply-shift、仕上げ）について、同じ経路の違う 2 入力で ε ≤ 2⁻⁶⁴ + 2⁻⁶³ ≤ 2⁻⁶² を証明 ✅ `LeanHash/Props/ShortPath.lean`（[journal](docs/journal/2026-11-09-p2-rest.md)）。経路ごとに独立な fin にして、1KB 以下の違う 2 入力すべてで ε ≤ 2⁻⁶² を 1 本の定理に ✅ `LeanHash/Props/Le1K.lean`（[journal](docs/journal/2026-11-10-per-path-fin.md)） |
 | P2.5 多項式段 | mod 2⁶¹−1 の多項式ハッシュの ε-AU（ε ≤ ℓ/p）と2段の合成 | 定理 → Horner mod p の ε-AU（違う係数列で衝突する r は次数以下）を証明 ✅ `LeanHash/Props/Poly.lean`（p = 2⁶¹−1 の素数性は Lucas–Lehmer）。v2c の 1KB より長い経路（NH32×2 → 60bit limb → 多項式 → multiply-shift）で ε ≤ 2⁻⁶⁴ + 3N/p + 2⁻⁶³ ≤ 2⁻⁶³ + (3N+1)/p（N = ⌊L/1024⌋+1）✅ `LeanHash/Props/Long.lean`。全長（L < p）の違う 2 入力すべてで ε ≤ 2⁻⁶³ + (3N+1)/p を 1 本の定理に ✅ `LeanHash/Props/All.lean` の `v2c_eps`。Lean の仕様と Rust の一致はテスト（`lean_spec_matches_hash_long`）（[journal](docs/journal/2026-11-10-p25-poly.md)） |
-| P3 結合と Rust 出力 | 合成則、HashIR と EmitRust（`wrapping_*`、`u128`、`std::arch`）、eval fast = spec | 差分テストで全一致 |
+| P3 結合と Rust 出力 | 合成則、HashIR と EmitRust（`wrapping_*`、`u128`、`std::arch`）、eval fast = spec | 差分テストで全一致 → 着手（2026-11-10）。HashIR（u64/u128 の直線型 DSL、`LeanHash/IR/`）と EmitRust、核 11 個（fmix64、仕上げ、NH32 レーン、NH64 組、reduce、mulmod、horner、multiply-shift、limb×3）の eval = spec を証明 ✅ `LeanHash/Impl/Equiv.lean`（horner は c < 2⁶³ の前提つき、繰り返しは `Props.horner` に一致）。v2c の核を生成コード `rust/leanhash/src/kernel.rs` に置き換え、手書き版との差分テストと切り替え前の出力で全一致 ✅。残り: バイト読み・ブロックのループ・SIMD・経路の分岐（[journal](docs/journal/2026-11-10-p3-hashir.md)） |
 | P3.5 外側処理の検証 | `Hasher::write` のバッファリング・端数・長さ符号化を safe Rust で書き、Aeneas で抽出して分割非依存性を証明 | 定理（詰まれば差分テスト・ファジングで代替） |
 | P4 評価と改良 | SMHasher3、速度比較、攻撃試行、SIMD 最適化、CLHASH 型・folded multiply 検討、C 出力 | SMHasher3 全通過＋速度目標 |
 

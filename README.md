@@ -40,6 +40,7 @@ workshop shell dev
 
 - `versions` … 各ツールの版を表示
 - `lean-build` / `lean-cache` … `lake build` / Mathlib キャッシュ取得
+- `emit-rust [--check]` … HashIR の核を `rust/leanhash/src/kernel.rs` に出力（`--check` は差分だけ確認）
 - `rust-test` / `rust-lint` … `rust/` の crate のテストと fmt・clippy
 - `smhasher` … `SMHasher3` に引数を渡して実行（例: `smhasher --list`）
 - `check` … Lean ビルドと Rust の lint・テストをまとめて実行

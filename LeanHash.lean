@@ -14,3 +14,8 @@ import LeanHash.Props.Poly
 import LeanHash.Spec.Long
 import LeanHash.Props.Long
 import LeanHash.Props.All
+import LeanHash.IR.Syntax
+import LeanHash.IR.Semantics
+import LeanHash.IR.EmitRust
+import LeanHash.Impl.Kernels
+import LeanHash.Impl.Equiv

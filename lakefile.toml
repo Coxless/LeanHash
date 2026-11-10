@@ -13,3 +13,8 @@ rev = "v4.35.0"
 
 [[lean_lib]]
 name = "LeanHash"
+
+# P3：HashIR の核を Rust に出力する（`lake exe emit_rust rust/leanhash/src/kernel.rs`）
+[[lean_exe]]
+name = "emit_rust"
+root = "LeanHash.Impl.EmitMain"

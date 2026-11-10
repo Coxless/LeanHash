@@ -20,6 +20,15 @@ actions:
   lean-build: |
     source /project/.workshop/env.sh
     cd /project && lake build "$@"
+  emit-rust: |
+    # HashIR の核を Rust に出力する（P3）。`--check` なら出力と既存の kernel.rs の差分だけを見る
+    source /project/.workshop/env.sh
+    cd /project
+    if [ "${1:-}" = "--check" ]; then
+      lake exe emit_rust | diff - rust/leanhash/src/kernel.rs
+    else
+      lake exe emit_rust rust/leanhash/src/kernel.rs
+    fi
   rust-test: |
     source /project/.workshop/env.sh
     if [ -f /project/rust/Cargo.toml ]; then
@@ -39,6 +48,7 @@ actions:
   check: |
     source /project/.workshop/env.sh
     cd /project && lake build
+    lake exe emit_rust | diff - rust/leanhash/src/kernel.rs
     if [ -f /project/rust/Cargo.toml ]; then
       cd /project/rust && cargo fmt --all --check && cargo clippy --workspace -- -D warnings && cargo test --workspace
     fi
