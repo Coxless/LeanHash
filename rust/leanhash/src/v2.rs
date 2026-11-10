@@ -558,6 +558,67 @@ mod tests {
             };
             fmix64(ms(k.m, acc) ^ fin)
         }
+
+        /// 長い経路（L > 1024）。`LeanHash/Spec/Long.lean` の msgL と `Props/Long.lean` の
+        /// outL → limbs → polyH（Horner mod p、最後に L）/ tsum → ms → fmix64 を素朴に写したもの。
+        pub fn hash_long_spec(k: &Keys, s: &[u8]) -> u64 {
+            let l = s.len();
+            let p = crate::P as u128;
+            let lanes: Vec<(u128, u128)> = (0..130)
+                .map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128))
+                .collect();
+            let nb = l / 1024;
+            let (mut h, mut t) = (0u128, 0u128);
+            for j in 0..nb + 1 {
+                let msg: Vec<Option<(u128, u128)>> = if j < nb {
+                    // msgFull：完全ブロックを msgB で読み、レーン 128 はなし
+                    let mut m = msg_b(&s[1024 * j..1024 * j + 1024]);
+                    m[128] = None;
+                    m
+                } else {
+                    // msgLast：末尾 max(rem, 8) バイトを msgB で読み（rem = 0 ならなし）、レーン 128 は長さ
+                    let rem = l % 1024;
+                    let mut m = if rem == 0 {
+                        vec![None; 129]
+                    } else {
+                        msg_b(&s[l - rem.max(8)..])
+                    };
+                    m[128] = Some(((l as u128) & 0xffff_ffff, ((l as u128) >> 32) & 0xffff_ffff));
+                    m
+                };
+                let x = nh_o(&lanes[..129], &msg, 32);
+                let y = nh_o(&lanes[1..], &msg, 32);
+                let v = x | (y << 64);
+                let mask = (1u128 << 60) - 1;
+                for c in [v & mask, (v >> 60) & mask, v >> 120] {
+                    h = (h * k.r as u128 + c) % p;
+                }
+                t = (t + y) % (1u128 << 64);
+            }
+            h = (h * k.r as u128 + l as u128) % p;
+            fmix64(ms(k.m, (h << 64) | t) ^ k.fin_long)
+        }
+    }
+
+    #[test]
+    fn lean_spec_matches_hash_long() {
+        let mut s = 78u64;
+        for seed in [1u64, 2, 3] {
+            let k = Keys::from_seed(seed);
+            let lens = (1025..=1100).chain([
+                2047, 2048, 2049, 2050, 2055, 2056, 2057, 3071, 3072, 3073, 4096, 5000, 9000,
+            ]);
+            for len in lens {
+                for _ in 0..2 {
+                    let b: Vec<u8> = (0..len).map(|_| splitmix64(&mut s) as u8).collect();
+                    assert_eq!(
+                        lean_spec::hash_long_spec(&k, &b),
+                        hash_c(&k, &b),
+                        "seed {seed} len {len}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

@@ -147,7 +147,7 @@ bench/                                       -- SMHasher3 への組み込み、�
 | P0 Lean 準備（並行） | Lean 4 / Mathlib 環境、BitVec と bv_decide | xorshift 自己逆の定理 ✅ `LeanHash/Spec/Mix.lean` |
 | P1 仕上げ段 | fmix64 の仕様・逆関数・左右逆 | fmix64 全単射の定理 ✅ `LeanHash/Spec/Fmix.lean`（[journal](docs/journal/2026-11-08-p1-fmix64.md)） |
 | P2 圧縮段（中心） | 固定長 NH の ε-AU を数え上げで証明、8〜16bit 版で全数照合 | ε-AU 定理と実測が一致 → 教科書どおりの NH の (1/W)-AU を証明 ✅ `LeanHash/Props/NH.lean`、全数照合は 1 組 9bit・2 組 4bit・16bit は抜き取りで一致（上界は tight）。1/W がちょうどの値であること（下限）も証明 ✅ `LeanHash/Props/NHLower.lean`（[journal](docs/journal/2026-11-09-p2-nh-lower.md)）。v2c の 1KB 以下の 2 経路（NH64 / NH32 の Toeplitz 2 本、端数の重ね読み、長さの組、multiply-shift、仕上げ）について、同じ経路の違う 2 入力で ε ≤ 2⁻⁶⁴ + 2⁻⁶³ ≤ 2⁻⁶² を証明 ✅ `LeanHash/Props/ShortPath.lean`（[journal](docs/journal/2026-11-09-p2-rest.md)）。経路ごとに独立な fin にして、1KB 以下の違う 2 入力すべてで ε ≤ 2⁻⁶² を 1 本の定理に ✅ `LeanHash/Props/Le1K.lean`（[journal](docs/journal/2026-11-10-per-path-fin.md)） |
-| P2.5 多項式段 | mod 2⁶¹−1 の多項式ハッシュの ε-AU（ε ≤ ℓ/p）と2段の合成 | 定理 |
+| P2.5 多項式段 | mod 2⁶¹−1 の多項式ハッシュの ε-AU（ε ≤ ℓ/p）と2段の合成 | 定理 → Horner mod p の ε-AU（違う係数列で衝突する r は次数以下）を証明 ✅ `LeanHash/Props/Poly.lean`（p = 2⁶¹−1 の素数性は Lucas–Lehmer）。v2c の 1KB より長い経路（NH32×2 → 60bit limb → 多項式 → multiply-shift）で ε ≤ 2⁻⁶⁴ + 3N/p + 2⁻⁶³ ≤ 2⁻⁶³ + (3N+1)/p（N = ⌊L/1024⌋+1）✅ `LeanHash/Props/Long.lean`。全長（L < p）の違う 2 入力すべてで ε ≤ 2⁻⁶³ + (3N+1)/p を 1 本の定理に ✅ `LeanHash/Props/All.lean` の `v2c_eps`。Lean の仕様と Rust の一致はテスト（`lean_spec_matches_hash_long`）（[journal](docs/journal/2026-11-10-p25-poly.md)） |
 | P3 結合と Rust 出力 | 合成則、HashIR と EmitRust（`wrapping_*`、`u128`、`std::arch`）、eval fast = spec | 差分テストで全一致 |
 | P3.5 外側処理の検証 | `Hasher::write` のバッファリング・端数・長さ符号化を safe Rust で書き、Aeneas で抽出して分割非依存性を証明 | 定理（詰まれば差分テスト・ファジングで代替） |
 | P4 評価と改良 | SMHasher3、速度比較、攻撃試行、SIMD 最適化、CLHASH 型・folded multiply 検討、C 出力 | SMHasher3 全通過＋速度目標 |
@@ -157,7 +157,7 @@ bench/                                       -- SMHasher3 への組み込み、�
 ## 8. 未解決の問い
 
 - [x] 速度目標 → ≤32B: rapidhash の 0.6 倍、64B〜1KB: 0.8 倍、≥4KB: XXH3 の 0.5 倍、PolymurHash 以上（2026-11-08 承認、[journal](docs/journal/2026-11-08-p0prime-prototype.md)）
-- [x] ε の目標 → 「2⁻⁶⁴ 寄り」: ≤1KB で 2⁻⁶²、長い入力で 2⁻⁶³ + (3n+1)/p（2026-11-08 承認、[journal](docs/journal/2026-11-08-p0prime-prototype.md)）。≤1KB は全組み合わせで ≤ 2⁻⁶² を証明（同じ経路 2⁻⁶⁴ + 2⁻⁶³、経路またぎ 2⁻⁶⁴。[journal](docs/journal/2026-11-10-per-path-fin.md)）
+- [x] ε の目標 → 「2⁻⁶⁴ 寄り」: ≤1KB で 2⁻⁶²、長い入力で 2⁻⁶³ + (3n+1)/p（2026-11-08 承認、[journal](docs/journal/2026-11-08-p0prime-prototype.md)）。≤1KB は全組み合わせで ≤ 2⁻⁶² を証明（同じ経路 2⁻⁶⁴ + 2⁻⁶³、経路またぎ 2⁻⁶⁴。[journal](docs/journal/2026-11-10-per-path-fin.md)）。長い入力も 2⁻⁶³ + (3N+1)/p（N = ⌊L/1024⌋+1、L < p）を証明し、全長で 1 本の定理 `v2c_eps` に（[journal](docs/journal/2026-11-10-p25-poly.md)）
 - [ ] Hasher に約 1KB の鍵をどう渡すか（P3.5 の設計に直結）
 - [ ] 通常乗算（NH）か繰り上がりなし乗算（CLHASH）か
 - [x] 任意長入力 → NH（固定長）＋多項式 mod 2⁶¹−1 の二段構成（UMAC/VHASH 型）を採用候補
