@@ -1,5 +1,12 @@
 import LeanHash.Spec.Mix
 import LeanHash.Spec.Fmix
 import LeanHash.Spec.NH
+import LeanHash.Spec.Encode
 import LeanHash.Props.NHCore
 import LeanHash.Props.NH
+import LeanHash.Props.NHLower
+import LeanHash.Props.Toeplitz
+import LeanHash.Props.MultShift
+import LeanHash.Props.Compose
+import LeanHash.Props.ShortPath
+import LeanHash.Props.Le1K
