@@ -2,6 +2,7 @@
 //!
 //! **手書きの試作版**であり、HashIR から生成した検証済み実装ではない。
 //! 速度と品質の当たりを付けるためのもので、差分テストの基準にもしない。
+//! （このファイルの `fmix64` / `reduce` / `mulmod` / `horner` は、生成した核 `kernel` との差分テストの相手としてだけ使う）
 //!
 //! 構造（入力 M、鍵 K = (k_nh, r, fin)）:
 //! 1. M を 128 バイトのブロックに分割（最後の端数ブロックは 0 埋め、使う語数だけ処理）
@@ -211,7 +212,13 @@ pub fn hash_nh32(k: &Keys, data: &[u8]) -> u64 {
     p.finish(k, data.len())
 }
 
+// HashIR から生成（`lake exe emit_rust`）。生成器の出力をそのまま置くので rustfmt にかけない
+#[rustfmt::skip]
+pub mod kernel;
 pub mod v2;
+
+#[cfg(test)]
+mod kernel_diff;
 
 #[cfg(test)]
 mod tests {

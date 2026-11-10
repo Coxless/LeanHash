@@ -9,7 +9,10 @@
 //! - **L > 1024:** 1KB ごとの NH64（長さの組なし）→ 60bit limb で多項式 mod 2^61−1 → 長さ係数 →
 //!   `(h<<3 | t>>61) ^ fin` を fmix64。ε ≤ 2^-64 + (3n+1)/p
 
-use crate::{fmix64, horner, splitmix64, LIMB_MASK, P};
+// 計算の核（NH のレーン・組、Horner、multiply-shift、limb、仕上げ）は HashIR から生成したもの（`kernel.rs`、
+// 仕様との一致は Lean の `LeanHash/Impl/Equiv.lean`）。バイトの読み出し・ループ・SIMD・経路の分岐はまだ手書き。
+use crate::kernel::{finish, horner, limb0, limb1, limb2, ms, nh32_lane, nh_pair};
+use crate::{splitmix64, P};
 
 pub const BLOCK_BYTES: usize = 1024;
 const PAIRS: usize = BLOCK_BYTES / 16; // 64
@@ -60,17 +63,6 @@ fn rd64(b: &[u8], i: usize) -> u64 {
 #[inline(always)]
 fn rd32(b: &[u8], i: usize) -> u64 {
     u32::from_le_bytes(b[i..i + 4].try_into().unwrap()) as u64
-}
-
-#[inline(always)]
-fn nh_pair(a: u64, b: u64, ka: u64, kb: u64) -> u128 {
-    (a.wrapping_add(ka) as u128) * (b.wrapping_add(kb) as u128)
-}
-
-/// 128bit → 64bit の multiply-shift（Dietzfelbinger）。m が奇数で一様なら 2^-63-AU。
-#[inline(always)]
-fn ms(m: u128, x: u128) -> u64 {
-    (m.wrapping_mul(x) >> 64) as u64
 }
 
 /// 1 ブロック全体の NH64（4 本の独立な和にして命令レベル並列を稼ぐ）。
@@ -138,7 +130,7 @@ pub fn hash(k: &Keys, data: &[u8]) -> u64 {
             k.nh[2 * PAIRS],
             k.nh[2 * PAIRS + 1],
         ));
-        return fmix64(ms(k.m, acc) ^ k.fin);
+        return finish(ms(k.m, acc), k.fin);
     }
     hash_long(k, data)
 }
@@ -150,9 +142,9 @@ fn hash_long(k: &Keys, data: &[u8]) -> u64 {
     let mut absorb = |acc: u128| {
         let lo = acc as u64;
         let hi = (acc >> 64) as u64;
-        h = horner(h, k.r, lo & LIMB_MASK);
-        h = horner(h, k.r, ((lo >> 60) | (hi << 4)) & LIMB_MASK);
-        h = horner(h, k.r, hi >> 56);
+        h = horner(h, k.r, limb0(lo));
+        h = horner(h, k.r, limb1(lo, hi));
+        h = horner(h, k.r, limb2(hi));
         t = t.wrapping_add(hi);
     };
     let mut blocks = data.chunks_exact(BLOCK_BYTES);
@@ -166,23 +158,13 @@ fn hash_long(k: &Keys, data: &[u8]) -> u64 {
         absorb(nh_partial(&k.nh, tail));
     }
     let h = horner(h, k.r, data.len() as u64);
-    fmix64(((h << 3) | (t >> 61)) ^ k.fin_long)
+    finish((h << 3) | (t >> 61), k.fin_long)
 }
 
 // ---------------------------------------------------------------------------
 // 試作2b: 長い入力を NH32 の Toeplitz 2 本（鍵を 1 レーンずらす）で処理する。
 // 1 レーン = 64bit = (偶数語, 奇数語) の u32 組。積は 32×32→64 なので AVX2/AVX-512 の vpmuludq に乗る。
 // 1 本の NH32 は ε = 2^-32、鍵をずらした 2 本で ε = 2^-64（UMAC の Toeplitz 構成）。
-
-const M32: u64 = 0xffff_ffff;
-
-/// 1 レーン分の NH32: (lo(v)+lo(k)) * (hi(v)+hi(k))、各和は mod 2^32。
-#[inline(always)]
-fn nh32_lane(v: u64, k: u64) -> u64 {
-    let lo = v.wrapping_add(k) & M32; // 下位 32bit は繰り上がりの影響を受けない
-    let hi = ((v >> 32) + (k >> 32)) & M32;
-    lo * hi
-}
 
 #[inline(always)]
 fn nh32x2_full_block(k: &[u64; KEY_WORDS], b: &[u8]) -> (u64, u64) {
@@ -298,7 +280,7 @@ pub fn hash_c(k: &Keys, data: &[u8]) -> u64 {
         // 長さレーン（鍵は最後の 2 語）を足す
         let x = x.wrapping_add(nh32_lane(len as u64, k.nh[KEY_WORDS - 2]));
         let y = y.wrapping_add(nh32_lane(len as u64, k.nh[KEY_WORDS - 1]));
-        return fmix64(ms(k.m, ((y as u128) << 64) | x as u128) ^ k.fin_mid);
+        return finish(ms(k.m, ((y as u128) << 64) | x as u128), k.fin_mid);
     }
     hash_long_b(k, data)
 }
@@ -317,9 +299,9 @@ fn hash_long_b(k: &Keys, data: &[u8]) -> u64 {
     let mut h = 0u64;
     let mut t = 0u64;
     let mut absorb = |(x, y): (u64, u64)| {
-        h = horner(h, k.r, x & LIMB_MASK);
-        h = horner(h, k.r, ((x >> 60) | (y << 4)) & LIMB_MASK);
-        h = horner(h, k.r, y >> 56);
+        h = horner(h, k.r, limb0(x));
+        h = horner(h, k.r, limb1(x, y));
+        h = horner(h, k.r, limb2(y));
         t = t.wrapping_add(y);
     };
     let mut blocks = data.chunks_exact(BLOCK_BYTES);
@@ -341,7 +323,8 @@ fn hash_long_b(k: &Keys, data: &[u8]) -> u64 {
     absorb((x, y));
     let h = horner(h, k.r, len);
     // 仕上げは 1 ブロック以内と同じ multiply-shift → fmix64（(h, t) ↦ 128bit は単射）
-    fmix64(ms(k.m, ((h as u128) << 64) | t as u128) ^ k.fin_long)
+    // horner の c に長さを渡す。生成した核の証明（`hornerK_eq`）は c < 2^63 を仮定する（len < 2^63 で成り立つ）
+    finish(ms(k.m, ((h as u128) << 64) | t as u128), k.fin_long)
 }
 
 #[cfg(test)]
@@ -458,6 +441,12 @@ mod tests {
     /// `Props/ShortPath.lean` の accA / accB → ms → fmix64）を素朴に写したもの。`hash_c` と全長で一致すること。
     mod lean_spec {
         use super::super::*;
+        use crate::fmix64;
+
+        /// multiply-shift（仕様 `Props.ms 128 64` の素朴な写し）。
+        fn ms(m: u128, x: u128) -> u64 {
+            (m.wrapping_mul(x) >> 64) as u64
+        }
 
         fn byte_at(s: &[u8], i: usize) -> u128 {
             s.get(i).copied().unwrap_or(0) as u128
@@ -633,5 +622,28 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// 生成した核に切り替える前（手書きの核、commit 64a56fa）の出力との差分テスト。
+/// 値は切り替え前に同じ入力で計算したもの（scalar と `-C target-cpu=native` で同じ値）。
+#[cfg(test)]
+mod golden {
+    use super::*;
+
+    #[test]
+    fn matches_handwritten_kernels() {
+        let mut acc = 0u64;
+        let mut s = 99u64;
+        for seed in [1u64, 2, 3, 0xdead_beef] {
+            let k = Keys::from_seed(seed);
+            for len in (0..=4200).chain([8191, 8192, 8193, 65536, 100_000]) {
+                let b: Vec<u8> = (0..len).map(|_| splitmix64(&mut s) as u8).collect();
+                acc = acc.rotate_left(5) ^ hash_c(&k, &b);
+                acc = acc.rotate_left(5) ^ hash(&k, &b);
+                acc = acc.rotate_left(5) ^ hash_b(&k, &b);
+            }
+        }
+        assert_eq!(acc, 0x8c5d62ac59bb4b5b);
     }
 }
