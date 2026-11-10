@@ -10,3 +10,7 @@ import LeanHash.Props.MultShift
 import LeanHash.Props.Compose
 import LeanHash.Props.ShortPath
 import LeanHash.Props.Le1K
+import LeanHash.Props.Poly
+import LeanHash.Spec.Long
+import LeanHash.Props.Long
+import LeanHash.Props.All
