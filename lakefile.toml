@@ -18,3 +18,8 @@ name = "LeanHash"
 [[lean_exe]]
 name = "emit_rust"
 root = "LeanHash.Impl.EmitMain"
+
+# P3：参照実装 hashCI のテストベクトル（Rust の hash_c との差分テスト用。`lake exe ref_vectors rust/leanhash/src/lean_ref_vectors.txt`）
+[[lean_exe]]
+name = "ref_vectors"
+root = "LeanHash.Impl.RefMain"

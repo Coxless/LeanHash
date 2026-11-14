@@ -10,7 +10,10 @@
 //!   `(h<<3 | t>>61) ^ fin` を fmix64。ε ≤ 2^-64 + (3n+1)/p
 
 // 計算の核（NH のレーン・組、Horner、multiply-shift、limb、仕上げ）は HashIR から生成したもの（`kernel.rs`、
-// 仕様との一致は Lean の `LeanHash/Impl/Equiv.lean`）。バイトの読み出し・ループ・SIMD・経路の分岐はまだ手書き。
+// 仕様との一致は Lean の `LeanHash/Impl/Equiv.lean`）。バイトの読み出し・ループ・SIMD・経路の分岐は手書き。
+// その外側（スカラー版）と同じ形で核を組んだ Lean の参照実装 `hashCI`（`LeanHash/Impl/Outer.lean`）は
+// 仕様と一致することを証明済み（`LeanHash/Impl/OuterEquiv.lean` の `hashCI_eq`）。この Rust と参照実装の一致は
+// 差分テスト（下の `lean_ref`）で見る。外側の Rust そのものの検証は P3.5（Aeneas）。
 use crate::kernel::{finish, horner, limb0, limb1, limb2, ms, nh32_lane, nh_pair};
 use crate::{splitmix64, P};
 
@@ -645,5 +648,48 @@ mod golden {
             }
         }
         assert_eq!(acc, 0x8c5d62ac59bb4b5b);
+    }
+}
+
+/// Lean の参照実装 `hashCI`（`LeanHash/Impl/Outer.lean`。仕様 `Props.hashV2c` との一致は
+/// `LeanHash/Impl/OuterEquiv.lean` の `hashCI_eq`）が出したテストベクトルとの差分テスト。
+/// ベクトルは `lake exe ref_vectors rust/leanhash/src/lean_ref_vectors.txt` で作る（`LeanHash/Impl/RefMain.lean`）。
+/// 鍵は `Keys::from_seed`、入力は状態 0x1234 から続けた splitmix64 の下位 8bit（seed・長さの順）。
+#[cfg(test)]
+mod lean_ref {
+    use super::*;
+
+    const VECTORS: &str = include_str!("lean_ref_vectors.txt");
+    const SEEDS: [u64; 4] = [1, 2, 3, 0xdead_beef];
+
+    fn lengths() -> Vec<usize> {
+        let mut v: Vec<usize> = (0..=40).collect();
+        v.extend([
+            63, 64, 65, 100, 127, 128, 129, 1000, 1016, 1017, 1023, 1024, 1025, 1026, 1031, 1032, 1033, 1040,
+            2047, 2048, 2049, 2055, 2056, 2057, 3000, 3072, 3073, 4096, 5000,
+        ]);
+        v
+    }
+
+    #[test]
+    fn matches_lean_reference() {
+        let mut lines = VECTORS.lines();
+        let mut st = 0x1234u64;
+        let mut n = 0;
+        for seed in SEEDS {
+            let k = Keys::from_seed(seed);
+            for len in lengths() {
+                let b: Vec<u8> = (0..len).map(|_| splitmix64(&mut st) as u8).collect();
+                let line = lines.next().expect("ベクトルが足りない（ref_vectors を出し直す）");
+                let f: Vec<&str> = line.split_whitespace().collect();
+                assert_eq!(u64::from_str_radix(f[0], 16).unwrap(), seed, "line {line}");
+                assert_eq!(f[1].parse::<usize>().unwrap(), len, "line {line}");
+                let want = u64::from_str_radix(f[2], 16).unwrap();
+                assert_eq!(hash_c(&k, &b), want, "seed {seed:#x} len {len}");
+                n += 1;
+            }
+        }
+        assert!(lines.next().is_none(), "ベクトルが余っている（ref_vectors を出し直す）");
+        assert_eq!(n, 280);
     }
 }
