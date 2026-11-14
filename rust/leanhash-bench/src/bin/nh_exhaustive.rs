@@ -15,9 +15,7 @@
 use std::thread;
 
 fn threads() -> usize {
-    thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1)
+    thread::available_parallelism().map(|n| n.get()).unwrap_or(1)
 }
 
 /// 1 組の差 f(m + k) − f(m' + k) mod W²（f(a, b) = a·b、加算は mod W）。
@@ -58,10 +56,8 @@ fn pair_max_for_delta(w: u32, d: (u64, u64), hist: &mut [u32]) -> (u32, bool) {
 
 fn mode_pair(w: u32) {
     let big_w = 1u64 << w;
-    let deltas: Vec<(u64, u64)> = (0..big_w)
-        .flat_map(|a| (0..big_w).map(move |b| (a, b)))
-        .filter(|&d| d != (0, 0))
-        .collect();
+    let deltas: Vec<(u64, u64)> =
+        (0..big_w).flat_map(|a| (0..big_w).map(move |b| (a, b))).filter(|&d| d != (0, 0)).collect();
     let t = threads();
     let chunk = deltas.len().div_ceil(t);
     let res: Vec<(u32, u64, bool)> = thread::scope(|s| {

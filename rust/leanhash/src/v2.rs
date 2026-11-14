@@ -74,12 +74,7 @@ fn nh_full_block(k: &[u64; KEY_WORDS], b: &[u8]) -> u128 {
     let mut acc = [0u128; 4];
     for (bc, kc) in b.chunks_exact(64).zip(k.chunks_exact(8)) {
         for j in 0..4 {
-            acc[j] = acc[j].wrapping_add(nh_pair(
-                rd64(bc, 16 * j),
-                rd64(bc, 16 * j + 8),
-                kc[2 * j],
-                kc[2 * j + 1],
-            ));
+            acc[j] = acc[j].wrapping_add(nh_pair(rd64(bc, 16 * j), rd64(bc, 16 * j + 8), kc[2 * j], kc[2 * j + 1]));
         }
     }
     acc[0].wrapping_add(acc[1]).wrapping_add(acc[2].wrapping_add(acc[3]))
@@ -95,10 +90,7 @@ fn nh_partial(k: &[u64; KEY_WORDS], b: &[u8]) -> u128 {
         } else if len >= 4 {
             (rd32(b, 0), rd32(b, len - 4))
         } else if len > 0 {
-            (
-                b[0] as u64 | (b[len / 2] as u64) << 8 | (b[len - 1] as u64) << 16,
-                0,
-            )
+            (b[0] as u64 | (b[len / 2] as u64) << 8 | (b[len - 1] as u64) << 16, 0)
         } else {
             return 0;
         };
@@ -114,7 +106,7 @@ fn nh_partial(k: &[u64; KEY_WORDS], b: &[u8]) -> u128 {
         acc0 = acc0.wrapping_add(nh_pair(rd64(bc, 0), rd64(bc, 8), kc[0], kc[1]));
         acc1 = acc1.wrapping_add(nh_pair(rd64(bc, 16), rd64(bc, 24), kc[2], kc[3]));
     }
-    if body.len() % 32 != 0 {
+    if !body.len().is_multiple_of(32) {
         let p = pairs - 2;
         acc0 = acc0.wrapping_add(nh_pair(rd64(b, 16 * p), rd64(b, 16 * p + 8), k[2 * p], k[2 * p + 1]));
     }
@@ -127,12 +119,7 @@ fn nh_partial(k: &[u64; KEY_WORDS], b: &[u8]) -> u128 {
 pub fn hash(k: &Keys, data: &[u8]) -> u64 {
     let len = data.len();
     if len <= BLOCK_BYTES {
-        let acc = nh_partial(&k.nh, data).wrapping_add(nh_pair(
-            len as u64,
-            0,
-            k.nh[2 * PAIRS],
-            k.nh[2 * PAIRS + 1],
-        ));
+        let acc = nh_partial(&k.nh, data).wrapping_add(nh_pair(len as u64, 0, k.nh[2 * PAIRS], k.nh[2 * PAIRS + 1]));
         return finish(ms(k.m, acc), k.fin);
     }
     hash_long(k, data)
@@ -224,10 +211,7 @@ unsafe fn nh32x2_block_avx2(k: &[u64; KEY_WORDS], b: &[u8; BLOCK_BYTES]) -> (u64
     let mut o2 = [0u64; 4];
     _mm256_storeu_si256(o1.as_mut_ptr() as *mut __m256i, _mm256_add_epi64(a1[0], a1[1]));
     _mm256_storeu_si256(o2.as_mut_ptr() as *mut __m256i, _mm256_add_epi64(a2[0], a2[1]));
-    (
-        o1.iter().fold(0u64, |s, x| s.wrapping_add(*x)),
-        o2.iter().fold(0u64, |s, x| s.wrapping_add(*x)),
-    )
+    (o1.iter().fold(0u64, |s, x| s.wrapping_add(*x)), o2.iter().fold(0u64, |s, x| s.wrapping_add(*x)))
 }
 
 #[allow(unused_assignments)]
@@ -316,11 +300,7 @@ fn hash_long_b(k: &Keys, data: &[u8]) -> u64 {
     // SMHasher3 の SeedZeroes（差分分布）で偏りが出た（journal 参照）。
     let len = data.len() as u64;
     let rem = blocks.remainder().len();
-    let (mut x, mut y) = if rem > 0 {
-        nh32x2_partial(&k.nh, &data[data.len() - rem.max(8)..])
-    } else {
-        (0, 0)
-    };
+    let (mut x, mut y) = if rem > 0 { nh32x2_partial(&k.nh, &data[data.len() - rem.max(8)..]) } else { (0, 0) };
     x = x.wrapping_add(nh32_lane(len, k.nh[KEY_WORDS - 2]));
     y = y.wrapping_add(nh32_lane(len, k.nh[KEY_WORDS - 1]));
     absorb((x, y));
@@ -524,11 +504,7 @@ mod tests {
                     let a = modw(m1.wrapping_add(k.0) & u64::MAX as u128);
                     let b = modw(m2.wrapping_add(k.1) & u64::MAX as u128);
                     let p = a.wrapping_mul(b);
-                    acc = if bits == 32 {
-                        (acc + p) & u64::MAX as u128
-                    } else {
-                        acc.wrapping_add(p)
-                    };
+                    acc = if bits == 32 { (acc + p) & u64::MAX as u128 } else { acc.wrapping_add(p) };
                 }
             }
             acc
@@ -536,13 +512,11 @@ mod tests {
 
         pub fn hash_spec(k: &Keys, s: &[u8]) -> u64 {
             let (acc, fin) = if s.len() <= 32 {
-                let keys: Vec<(u128, u128)> =
-                    (0..65).map(|i| (k.nh[2 * i] as u128, k.nh[2 * i + 1] as u128)).collect();
+                let keys: Vec<(u128, u128)> = (0..65).map(|i| (k.nh[2 * i] as u128, k.nh[2 * i + 1] as u128)).collect();
                 (nh_o(&keys, &msg_a(s), 64), k.fin)
             } else {
-                let lanes: Vec<(u128, u128)> = (0..130)
-                    .map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128))
-                    .collect();
+                let lanes: Vec<(u128, u128)> =
+                    (0..130).map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128)).collect();
                 let m = msg_b(s);
                 let x = nh_o(&lanes[..129], &m, 32);
                 let y = nh_o(&lanes[1..], &m, 32);
@@ -556,9 +530,8 @@ mod tests {
         pub fn hash_long_spec(k: &Keys, s: &[u8]) -> u64 {
             let l = s.len();
             let p = crate::P as u128;
-            let lanes: Vec<(u128, u128)> = (0..130)
-                .map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128))
-                .collect();
+            let lanes: Vec<(u128, u128)> =
+                (0..130).map(|i| ((k.nh[i] & 0xffff_ffff) as u128, (k.nh[i] >> 32) as u128)).collect();
             let nb = l / 1024;
             let (mut h, mut t) = (0u128, 0u128);
             for j in 0..nb + 1 {
@@ -570,11 +543,7 @@ mod tests {
                 } else {
                     // msgLast：末尾 max(rem, 8) バイトを msgB で読み（rem = 0 ならなし）、レーン 128 は長さ
                     let rem = l % 1024;
-                    let mut m = if rem == 0 {
-                        vec![None; 129]
-                    } else {
-                        msg_b(&s[l - rem.max(8)..])
-                    };
+                    let mut m = if rem == 0 { vec![None; 129] } else { msg_b(&s[l - rem.max(8)..]) };
                     m[128] = Some(((l as u128) & 0xffff_ffff, ((l as u128) >> 32) & 0xffff_ffff));
                     m
                 };
@@ -597,17 +566,12 @@ mod tests {
         let mut s = 78u64;
         for seed in [1u64, 2, 3] {
             let k = Keys::from_seed(seed);
-            let lens = (1025..=1100).chain([
-                2047, 2048, 2049, 2050, 2055, 2056, 2057, 3071, 3072, 3073, 4096, 5000, 9000,
-            ]);
+            let lens =
+                (1025..=1100).chain([2047, 2048, 2049, 2050, 2055, 2056, 2057, 3071, 3072, 3073, 4096, 5000, 9000]);
             for len in lens {
                 for _ in 0..2 {
                     let b: Vec<u8> = (0..len).map(|_| splitmix64(&mut s) as u8).collect();
-                    assert_eq!(
-                        lean_spec::hash_long_spec(&k, &b),
-                        hash_c(&k, &b),
-                        "seed {seed} len {len}"
-                    );
+                    assert_eq!(lean_spec::hash_long_spec(&k, &b), hash_c(&k, &b), "seed {seed} len {len}");
                 }
             }
         }
@@ -665,8 +629,8 @@ mod lean_ref {
     fn lengths() -> Vec<usize> {
         let mut v: Vec<usize> = (0..=40).collect();
         v.extend([
-            63, 64, 65, 100, 127, 128, 129, 1000, 1016, 1017, 1023, 1024, 1025, 1026, 1031, 1032, 1033, 1040,
-            2047, 2048, 2049, 2055, 2056, 2057, 3000, 3072, 3073, 4096, 5000,
+            63, 64, 65, 100, 127, 128, 129, 1000, 1016, 1017, 1023, 1024, 1025, 1026, 1031, 1032, 1033, 1040, 2047,
+            2048, 2049, 2055, 2056, 2057, 3000, 3072, 3073, 4096, 5000,
         ]);
         v
     }

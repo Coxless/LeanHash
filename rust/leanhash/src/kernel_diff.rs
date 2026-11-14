@@ -103,12 +103,7 @@ fn reduce_mulmod_horner() {
     let p = P as u128;
     for w in xs.windows(3) {
         // reduce は全 u64 で x mod p（Lean の reduceK_eq）。手書き版も同じ式
-        assert_eq!(
-            kernel::reduce(w[0]),
-            (w[0] as u128 % p) as u64,
-            "x {:#x}",
-            w[0]
-        );
+        assert_eq!(kernel::reduce(w[0]), (w[0] as u128 % p) as u64, "x {:#x}", w[0]);
         let (a, b, c) = (w[0] % P, w[1] % P, w[2]);
         assert_eq!(kernel::mulmod(a, b), crate::mulmod(a, b));
         assert_eq!(kernel::mulmod(a, b) as u128, a as u128 * b as u128 % p);
@@ -116,10 +111,7 @@ fn reduce_mulmod_horner() {
         // c が大きいと debug ビルドで overflow の panic になる。比べるのは前提の範囲内だけ
         if c < 1 << 63 {
             assert_eq!(kernel::horner(a, b, c), crate::horner(a, b, c));
-            assert_eq!(
-                kernel::horner(a, b, c) as u128,
-                (a as u128 * b as u128 + c as u128) % p
-            );
+            assert_eq!(kernel::horner(a, b, c) as u128, (a as u128 * b as u128 + c as u128) % p);
         }
     }
 }
@@ -145,9 +137,6 @@ fn ms_and_limbs() {
         // 仕様（Lean の limbs）: v = x + 2^64·y の 60bit ずつ
         let v = lx as u128 | (ly as u128) << 64;
         let mask = (1u128 << 60) - 1;
-        assert_eq!(
-            got.map(|g| g as u128),
-            [v & mask, (v >> 60) & mask, v >> 120]
-        );
+        assert_eq!(got.map(|g| g as u128), [v & mask, (v >> 60) & mask, v >> 120]);
     }
 }
