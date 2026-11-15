@@ -12,9 +12,7 @@ use std::hint::black_box;
 use std::time::Instant;
 
 const BUF: usize = 1 << 21;
-const SIZES: &[usize] = &[
-    0, 3, 8, 16, 24, 32, 64, 100, 128, 256, 512, 1024, 4096, 16384, 65536, 1 << 20,
-];
+const SIZES: &[usize] = &[0, 3, 8, 16, 24, 32, 64, 100, 128, 256, 512, 1024, 4096, 16384, 65536, 1 << 20];
 
 #[cfg(have_clhash)]
 mod clhash_ffi {
@@ -47,29 +45,39 @@ fn hashers(seed: u64) -> Vec<(&'static str, HashFn)> {
         ("leanhash-nh32", Box::new(move |d| leanhash::hash_nh32(&k2, d))),
         ("xxh3-64", Box::new(move |d| xxhash_rust::xxh3::xxh3_64_with_seed(d, seed))),
         ("rapidhash-v3", Box::new(move |d| rapidhash::v3::rapidhash_v3_seeded(d, &rs))),
-        ("foldhash-fast", Box::new(move |d| {
-            let mut h = fold.build_hasher();
-            h.write(d);
-            h.finish()
-        })),
-        ("foldhash-quality", Box::new(move |d| {
-            let mut h = foldq.build_hasher();
-            h.write(d);
-            h.finish()
-        })),
+        (
+            "foldhash-fast",
+            Box::new(move |d| {
+                let mut h = fold.build_hasher();
+                h.write(d);
+                h.finish()
+            }),
+        ),
+        (
+            "foldhash-quality",
+            Box::new(move |d| {
+                let mut h = foldq.build_hasher();
+                h.write(d);
+                h.finish()
+            }),
+        ),
         ("polymurhash", Box::new(move |d| poly.hash(d))),
-        ("ahash", Box::new(move |d| {
-            let mut h = ah.build_hasher();
-            h.write(d);
-            h.finish()
-        })),
+        (
+            "ahash",
+            Box::new(move |d| {
+                let mut h = ah.build_hasher();
+                h.write(d);
+                h.finish()
+            }),
+        ),
     ];
     #[cfg(have_clhash)]
     {
         let key = unsafe { clhash_ffi::get_random_key_for_clhash(seed, !seed) } as usize;
-        v.push(("clhash", Box::new(move |d| unsafe {
-            clhash_ffi::clhash(key as *const _, d.as_ptr() as *const _, d.len())
-        })));
+        v.push((
+            "clhash",
+            Box::new(move |d| unsafe { clhash_ffi::clhash(key as *const _, d.as_ptr() as *const _, d.len()) }),
+        ));
     }
     v
 }
@@ -136,10 +144,7 @@ fn measure_all(hs: &[(&'static str, HashFn)], buf: &[u8], n: usize, target_ms: f
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v[v.len() / 2]
     };
-    ns.into_iter()
-        .zip(cyc)
-        .map(|(a, c)| Sample { ns_per_hash: med(a), cyc_per_hash: med(c) })
-        .collect()
+    ns.into_iter().zip(cyc).map(|(a, c)| Sample { ns_per_hash: med(a), cyc_per_hash: med(c) }).collect()
 }
 
 fn main() {
@@ -169,11 +174,7 @@ fn main() {
             let gbs = if n == 0 { 0.0 } else { n as f64 / r.ns_per_hash };
             let cpb = if n == 0 { 0.0 } else { r.cyc_per_hash / n as f64 };
             rows.push(format!("{name},{n},{:.3},{:.3},{:.4}", r.ns_per_hash, gbs, cpb));
-            cells.push(if n >= 1024 {
-                format!("{gbs:.2} GB/s")
-            } else {
-                format!("{:.2} ns", r.ns_per_hash)
-            });
+            cells.push(if n >= 1024 { format!("{gbs:.2} GB/s") } else { format!("{:.2} ns", r.ns_per_hash) });
         }
         println!("| {n} | {} |", cells.join(" | "));
     }

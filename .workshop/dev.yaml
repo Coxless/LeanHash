@@ -29,6 +29,15 @@ actions:
     else
       lake exe emit_rust rust/leanhash/src/kernel.rs
     fi
+  ref-vectors: |
+    # 参照実装 hashCI のテストベクトル（P3）。`--check` なら出力と既存のファイルの差分だけを見る
+    source /project/.workshop/env.sh
+    cd /project
+    if [ "${1:-}" = "--check" ]; then
+      lake exe ref_vectors | diff - rust/leanhash/src/lean_ref_vectors.txt
+    else
+      lake exe ref_vectors rust/leanhash/src/lean_ref_vectors.txt
+    fi
   rust-test: |
     source /project/.workshop/env.sh
     if [ -f /project/rust/Cargo.toml ]; then
@@ -49,6 +58,7 @@ actions:
     source /project/.workshop/env.sh
     cd /project && lake build
     lake exe emit_rust | diff - rust/leanhash/src/kernel.rs
+    lake exe ref_vectors | diff - rust/leanhash/src/lean_ref_vectors.txt
     if [ -f /project/rust/Cargo.toml ]; then
       cd /project/rust && cargo fmt --all --check && cargo clippy --workspace -- -D warnings && cargo test --workspace
     fi
