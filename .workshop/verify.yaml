@@ -15,10 +15,14 @@ actions:
     charon version 2>/dev/null || charon --version
     aeneas -version 2>/dev/null || ls -l "$(command -v aeneas)"
   extract: |
-    # 例: workshop run verify -- extract rust/leanhash-outer  → Lean/Extracted/ に出力
+    # P3.5：rust/leanhash の outer モジュール（とそこから呼ぶ核）を Charon + Aeneas で Lean に抽出し、
+    # LeanHash/Aeneas/Leanhash.lean に置く。`--check` なら既存のファイルとの差分だけを見る
     source /project/.workshop/env.sh
-    crate="${1:?usage: extract <crate dir>}"
-    out=/project/LeanHash/Extracted
-    mkdir -p "$out"
-    (cd "/project/$crate" && charon cargo --preset=aeneas --dest-file /tmp/crate.llbc)
-    aeneas -backend lean /tmp/crate.llbc -dest "$out"
+    tmp="$(mktemp -d)"
+    (cd /project/rust/leanhash && charon cargo --preset=aeneas --start-from leanhash::outer --dest-file "$tmp/leanhash.llbc")
+    aeneas -backend lean -dest "$tmp" "$tmp/leanhash.llbc"
+    if [ "${1:-}" = "--check" ]; then
+      diff "$tmp/Leanhash.lean" /project/LeanHash/Aeneas/Leanhash.lean
+    else
+      cp "$tmp/Leanhash.lean" /project/LeanHash/Aeneas/Leanhash.lean
+    fi

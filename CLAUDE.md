@@ -28,3 +28,4 @@
 
 - LXD がないため `workshop` は動かない。フックを `bash -eo pipefail .workshop/<sdk>/hooks/setup-project` で直接実行して代用する（`/project` → リポジトリのシンボリックリンクが必要）
 - release.lean-lang.org はネットワーク方針で遮断されている。Lean は GitHub Releases（`leanprover/lean4`）から直接取得する
+- opam.ocaml.org も遮断されているので Aeneas はビルドできない。GitHub Releases の nightly（`.workshop/versions.sh` の `AENEAS_REV` に対応するタグ）の `aeneas-linux-x86_64.tar.gz` を使い、Charon 用に `rustup toolchain install nightly-2026-09-17 -c rustc-dev,llvm-tools,rust-src` を入れる（手順は `docs/journal/2026-11-15-p35-aeneas.md`）

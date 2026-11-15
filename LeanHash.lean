@@ -21,3 +21,5 @@ import LeanHash.Impl.Kernels
 import LeanHash.Impl.Equiv
 import LeanHash.Impl.Outer
 import LeanHash.Impl.OuterEquiv
+import LeanHash.Aeneas.Leanhash
+import LeanHash.Aeneas.OuterProof

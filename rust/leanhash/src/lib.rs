@@ -215,6 +215,7 @@ pub fn hash_nh32(k: &Keys, data: &[u8]) -> u64 {
 // HashIR から生成（`lake exe emit_rust`）。生成器の出力をそのまま置くので rustfmt にかけない
 #[rustfmt::skip]
 pub mod kernel;
+pub mod outer;
 pub mod v2;
 
 #[cfg(test)]

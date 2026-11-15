@@ -245,13 +245,9 @@ fn nh32x2_partial(k: &[u64; KEY_WORDS], b: &[u8]) -> (u64, u64) {
         s2 = o[4].wrapping_add(o[5]).wrapping_add(o[6].wrapping_add(o[7]));
         i = 4 * chunks;
     }
-    while i < lanes {
-        let v = if i + 1 == lanes { rd64(b, len - 8) } else { rd64(b, 8 * i) };
-        s1 = s1.wrapping_add(nh32_lane(v, k[i]));
-        s2 = s2.wrapping_add(nh32_lane(v, k[i + 1]));
-        i += 1;
-    }
-    (s1, s2)
+    // 残りのレーン（AVX2 がなければ全レーン）は Aeneas で抽出して検証した `outer::nh32x2_lanes`
+    // （Lean の `LeanHash/Aeneas/OuterProof.lean`：参照実装 `nh32x2PartialI`、さらに仕様の `nhT` と一致）
+    crate::outer::nh32x2_lanes(k, b, lanes, i, s1, s2)
 }
 
 /// 試作2c。32 バイト以下は NH64（`hash` と同じ）、33..=1024 は NH32x2 + 長さレーン → multiply-shift、
